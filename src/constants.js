@@ -174,16 +174,29 @@ export function generateWeeks() {
 export const WEEKS = generateWeeks();
 
 export function buildWeeklyPlan() {
-  const all = [
-    ...SUBJECTS.romana.chapters.map(c => ({ ...c, subject: "romana" })),
-    ...SUBJECTS.matematica.chapters.map(c => ({ ...c, subject: "matematica" })),
-  ];
-  const plan = {}; WEEKS.forEach(w => { plan[w.id] = []; });
-  all.forEach((ch, i) => {
-    const idx = Math.min(Math.floor((i / all.length) * WEEKS.length), WEEKS.length - 1);
-    plan[WEEKS[idx].id].push(ch);
-  });
+  const romana = SUBJECTS.romana.chapters.map(c => ({ ...c, subject: "romana" }));
+  const mate   = SUBJECTS.matematica.chapters.map(c => ({ ...c, subject: "matematica" }));
+  
+  const plan = {};
+  WEEKS.forEach(w => { plan[w.id] = []; });
+
+  // Intercalează: câte 1 capitol din fiecare materie pe săptămână
+  const maxLen = Math.max(romana.length, mate.length);
+  let weekIdx = 0;
+
+  for (let i = 0; i < maxLen; i++) {
+    if (romana[i]) {
+      plan[WEEKS[weekIdx % WEEKS.length].id].push(romana[i]);
+      weekIdx++;
+    }
+    if (mate[i]) {
+      plan[WEEKS[weekIdx % WEEKS.length].id].push(mate[i]);
+      weekIdx++;
+    }
+  }
+
   return plan;
+}
 }
 export const WEEKLY_PLAN = buildWeeklyPlan();
 
