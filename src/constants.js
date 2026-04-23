@@ -197,7 +197,6 @@ export function buildWeeklyPlan() {
 
   return plan;
 }
-}
 export const WEEKLY_PLAN = buildWeeklyPlan();
 
 export function fmt(date) { return date.toLocaleDateString("ro-RO", { day: "numeric", month: "short" }); }
