@@ -1,7 +1,7 @@
 # 🎓 Planul lui Ari – EN 2026 v2
 
 ## Cum funcționează bifarea unui capitol
-1. **📚 Lecție** — Claude generează explicația (salvată local, nu se regenerează) 
+1. **📚 Lecție** — Claude generează explicația (salvată local, nu se regenerează)
 2. **💬 Tutore** — Chat cu Claude contextualizat pe capitol
 3. **🧠 Quiz** — 10 întrebări generate de Claude, minim 8/10 pentru a trece
 4. **📸 Screenshot** — Ari încarcă dovada că a studiat

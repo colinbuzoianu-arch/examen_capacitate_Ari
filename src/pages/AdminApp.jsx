@@ -28,7 +28,7 @@ export default function AdminApp({ onLogout }) {
     setUL2(true);
     try {
       const res = await fetch("/api/admin-users", {
-        headers: { Authorization: `Bearer ${process.env.ADMIN_SECRET || btoa("Babel2012")}` },
+        headers: { Authorization: `Bearer ${btoa("Babel2012")}` },
       });
       const data = await res.json();
       if (data.ok) setAllUsers(data.users || []);
