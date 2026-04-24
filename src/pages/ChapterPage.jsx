@@ -187,7 +187,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
           {hasScreenshot ? "✓" : "2"} Screenshot
         </div>
         <div style={S.unlockLine} />
-        <div style={{ ...S.unlockStep, background: isUnlocked ? "#F1C40F" : "#333", color: isUnlocked ? "#111" : "#eee" }}>
+        <div style={{ ...S.unlockStep, background: isUnlocked ? "#C8A84B" : "#F0EDE6", color: isUnlocked ? "#fff" : "#888", border: isUnlocked ? "1px solid #C8A84B" : "1px solid #D5D0C8" }}>
           {isUnlocked ? "✓" : "🔒"} Bifat
         </div>
       </div>
@@ -197,7 +197,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
         {tabs.map(t => (
           <button key={t.id} style={{ ...S.tabBtn, ...(tab === t.id ? { ...S.tabBtnOn, borderBottomColor: sub.accent } : {}) }}
             onClick={() => setTab(t.id)}>
-            <span>{t.icon}</span> <span style={{ fontSize: 11 }}>{t.label}</span>
+            <span>{t.icon}</span> <span style={{ fontSize: 12, fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>{t.label}</span>
           </button>
         ))}
       </div>
@@ -284,7 +284,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                 <div style={{ fontSize: 40 }}>🧠</div>
                 <p style={{ color: "#888", fontSize: 14 }}>
                   Quiz de 10 întrebări din <strong>{chapter.title}</strong>.<br />
-                  Trebuie să răspunzi corect la minim <strong style={{ color: "#F1C40F" }}>8 din 10</strong> pentru a bifa capitolul.
+                  Trebuie să răspunzi corect la minim <strong style={{ color: "#C8A84B", fontFamily: "'Syne',sans-serif" }}>8 din 10</strong> pentru a bifa capitolul.
                 </p>
                 <button style={{ ...S.btnY, width: "auto" }} onClick={loadQuiz}>
                   🎯 Începe quiz-ul
@@ -300,9 +300,9 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
               <div>
                 {/* Score banner */}
                 {quizResult && (
-                  <div style={{ ...S.resultBanner, background: quizResult.passed ? "#1a3a1a" : "#3a1a1a", borderColor: quizResult.passed ? "#6BCB77" : "#FF6B6B" }}>
+                  <div style={{ ...S.resultBanner, background: quizResult.passed ? "#E8F5E9" : "#FFF0EE", borderColor: quizResult.passed ? "#A5D6A7" : "#FFCDD2" }}>
                     <div style={{ fontSize: 28, marginBottom: 6 }}>{quizResult.passed ? "🎉" : "😔"}</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: quizResult.passed ? "#6BCB77" : "#FF6B6B" }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: quizResult.passed ? "#2E7D32" : "#C62828", fontFamily: "'Syne',sans-serif" }}>
                       {quizResult.score}/10
                     </div>
                     <div style={{ fontSize: 13, color: "#444", margin: "6px 0" }}>
@@ -335,9 +335,10 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                               onClick={() => selectAnswer(qi, letter)}
                               style={{
                                 ...S.optBtn,
-                                background: correct ? "#1a3a1a" : wrong ? "#3a1a1a" : sel ? "#252525" : "#1a1a1a",
-                                border: `1px solid ${correct ? "#6BCB77" : wrong ? "#FF6B6B" : sel ? sub.accent : "#333"}`,
-                                color: correct ? "#6BCB77" : wrong ? "#FF6B6B" : sel ? "#fff" : "#ccc",
+                                background: correct ? "#E8F5E9" : wrong ? "#FFF0EE" : sel ? "#EEF4FF" : "#F8F6F2",
+                                border: `1px solid ${correct ? "#A5D6A7" : wrong ? "#FFCDD2" : sel ? sub.accent : "#D5D0C8"}`,
+                                color: correct ? "#2E7D32" : wrong ? "#C62828" : sel ? "#1A1A1A" : "#333",
+                                fontWeight: sel || correct || wrong ? 600 : 400,
                               }}>
                               {opt}
                             </button>
@@ -382,7 +383,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                 </div>
               )}
 
-              <div style={{ ...S.dropZone, borderColor: screenshot ? "#6BCB77" : "#333" }}
+              <div style={{ ...S.dropZone, borderColor: screenshot ? "#2E7D32" : "#D5D0C8" }}
                 onClick={() => fileRef.current?.click()}>
                 {screenshot
                   ? <img src={screenshot} alt="screenshot" style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 8 }} />
@@ -403,9 +404,9 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
 
             {/* Final unlock status */}
             {isUnlocked ? (
-              <div style={{ ...S.resultBanner, background: "#1a2e1a", borderColor: "#6BCB77" }}>
+              <div style={{ ...S.resultBanner, background: "#E8F5E9", borderColor: "#A5D6A7" }}>
                 <div style={{ fontSize: 32 }}>🏆</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: "#6BCB77" }}>Capitol bifat cu succes!</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: "#2E7D32", fontFamily: "'Syne',sans-serif" }}>Capitol bifat cu succes!</div>
                 <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
                   Quiz trecut + dovada încărcată. Felicitări Ari! 💪
                 </div>
@@ -430,32 +431,33 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
 // ── Minimal markdown renderer ─────────────────────────────────────────────────
 function renderMd(text) {
   return text
-    .replace(/^## (.+)$/gm, '<h2 style="color:#F1C40F;font-size:16px;margin:20px 0 8px;font-family:Georgia,serif;">$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3 style="color:#eee;font-size:14px;margin:14px 0 6px;font-family:Georgia,serif;">$1</h3>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#fff;">$1</strong>')
-    .replace(/^- (.+)$/gm, '<li style="color:#ccc;font-size:13px;margin:3px 0;list-style:disc;margin-left:18px;">$1</li>')
+    .replace(/^# (.+)$/gm, '<h1 style="color:#1A1A1A;font-size:17px;margin:20px 0 10px;font-family:Syne,sans-serif;font-weight:800;border-bottom:2px solid #E0DBD0;padding-bottom:6px;">$1</h1>')
+    .replace(/^## (.+)$/gm, '<h2 style="color:#C8A84B;font-size:15px;margin:20px 0 8px;font-family:Syne,sans-serif;font-weight:800;">$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3 style="color:#1A5276;font-size:14px;margin:14px 0 6px;font-family:Syne,sans-serif;font-weight:700;">$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#1A1A1A;font-weight:700;">$1</strong>')
+    .replace(/^- (.+)$/gm, '<li style="color:#333;font-size:13px;margin:5px 0;list-style:disc;margin-left:20px;line-height:1.6;">$1</li>')
     .replace(/\n/g, '<br/>');
 }
 
 function Spinner() {
-  return <div style={{ width: 20, height: 20, border: "2px solid #333", borderTop: "2px solid #F1C40F", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />;
+  return <div style={{ width: 20, height: 20, border: "2px solid #E0DBD0", borderTop: "2px solid #C8A84B", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />;
 }
 
 // ── STYLES ────────────────────────────────────────────────────────────────────
 const S = {
   shell: { background: "#F0EDE6", minHeight: "100vh", fontFamily: "'Inter',sans-serif", color: "#1A1A1A", display: "flex", flexDirection: "column" },
-  topBar: { background: "#fff", borderBottom: "2px solid #E0DBD0", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 },
+  topBar: { background: "#fff", borderBottom: "2px solid #E0DBD0", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 6px rgba(0,0,0,.04)" },
   backBtn: { background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: 14, fontFamily: "'Inter',sans-serif", padding: "4px 8px" },
   chapInfo: { display: "flex", alignItems: "center", gap: 8, flex: 1 },
-  chapName: { fontSize: 14, fontWeight: 700, color: "#1A1A1A" },
-  unlocked: { background: "#1a3a1a", color: "#6BCB77", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, border: "1px solid #2a5a2a" },
+  chapName: { fontSize: 15, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" },
+  unlocked: { background: "#E8F5E9", color: "#2E7D32", fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, border: "1px solid #A5D6A7", fontFamily: "'Inter',sans-serif" },
 
-  unlockBar: { background: "#F8F6F2", borderBottom: "1px solid #1e1e1e", padding: "8px 16px", display: "flex", alignItems: "center", gap: 0, justifyContent: "center" },
-  unlockStep: { fontSize: 10, fontWeight: 700, color: "#1A1A1A", padding: "4px 10px", borderRadius: 20, whiteSpace: "nowrap" },
+  unlockBar: { background: "#fff", borderBottom: "2px solid #E0DBD0", padding: "10px 16px", display: "flex", alignItems: "center", gap: 0, justifyContent: "center" },
+  unlockStep: { fontSize: 11, fontWeight: 700, color: "#333", padding: "5px 12px", borderRadius: 20, whiteSpace: "nowrap", fontFamily: "'Inter',sans-serif", border: "1px solid #D5D0C8" },
   unlockLine: { flex: 1, maxWidth: 40, height: 1, background: "#D5D0C8", margin: "0 4px" },
 
   tabNav: { display: "flex", background: "#fff", borderBottom: "2px solid #E0DBD0" },
-  tabBtn: { flex: 1, background: "none", border: "none", borderBottom: "2px solid transparent", color: "#444", padding: "10px 4px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: "'Inter',sans-serif", fontSize: 16 },
+  tabBtn: { flex: 1, background: "none", border: "none", borderBottom: "3px solid transparent", color: "#999", padding: "12px 4px 13px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontFamily: "'Inter',sans-serif", fontSize: 22, transition: "color .15s" },
   tabBtnOn: { color: "#1A1A1A", borderBottom: "2px solid #F1C40F" },
 
   body: { flex: 1, padding: "16px 14px 80px", maxWidth: 640, margin: "0 auto", width: "100%" },
@@ -475,34 +477,35 @@ const S = {
   bubble: { margin: "8px 0", padding: "10px 14px", borderRadius: 12, maxWidth: "88%", fontSize: 13 },
   bubbleUser: { background: "#EEF4FF", color: "#1A1A1A", marginLeft: "auto", borderBottomRightRadius: 4 },
   bubbleAI: { background: "#F8F6F2", color: "#444", marginRight: "auto", borderBottomLeftRadius: 4 },
-  aiLabel: { fontSize: 10, color: "#444", marginBottom: 4 },
+  aiLabel: { fontSize: 11, color: "#C8A84B", marginBottom: 4, fontWeight: 700, fontFamily: "'Syne',sans-serif" },
   typingDots: { display: "flex", gap: 4, alignItems: "center" },
   chatInput: { display: "flex", gap: 8, padding: "10px 0 0", borderTop: "2px solid #E0DBD0", marginTop: 8 },
   chatInputField: { flex: 1, background: "#fff", border: "1px solid #EAE6DF", color: "#1A1A1A", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontFamily: "'Inter',sans-serif", outline: "none" },
 
-  qCard: { background: "#fff", borderRadius: 10, padding: 14, marginBottom: 12 },
-  qNum: { fontSize: 10, color: "#444", marginBottom: 4, fontWeight: 700 },
-  qText: { fontSize: 13, color: "#1A1A1A", marginBottom: 12, lineHeight: 1.6 },
+  qCard: { background: "#fff", borderRadius: 12, padding: "14px 16px", marginBottom: 12, border: "1px solid #E0DBD0", boxShadow: "0 1px 4px rgba(0,0,0,.04)" },
+  qNum: { fontSize: 11, color: "#C8A84B", marginBottom: 6, fontWeight: 800, fontFamily: "'Syne',sans-serif", textTransform: "uppercase", letterSpacing: "0.5px" },
+  qText: { fontSize: 14, color: "#1A1A1A", marginBottom: 14, lineHeight: 1.65, fontWeight: 500 },
   qOptions: { display: "flex", flexDirection: "column", gap: 6 },
-  optBtn: { borderRadius: 8, padding: "9px 14px", cursor: "pointer", fontSize: 12, textAlign: "left", fontFamily: "'Inter',sans-serif", transition: "all 0.15s" },
-  explanation: { marginTop: 10, fontSize: 11, color: "#444", fontStyle: "italic", borderTop: "1px solid #2a2a2a", paddingTop: 8 },
+  optBtn: { borderRadius: 9, padding: "11px 14px", cursor: "pointer", fontSize: 13, textAlign: "left", fontFamily: "'Inter',sans-serif", transition: "all 0.15s", lineHeight: 1.4 },
+  explanation: { marginTop: 10, fontSize: 12, color: "#555", fontStyle: "italic", borderTop: "1px solid #E0DBD0", paddingTop: 8 },
   resultBanner: { border: "1px solid", borderRadius: 12, padding: "18px 16px", marginBottom: 16, textAlign: "center" },
 
   card: { background: "#fff", borderRadius: 12, padding: 16, marginBottom: 14 },
   cardTitle: { fontWeight: 700, fontSize: 14, color: "#bbb", marginBottom: 10 },
   dropZone: { background: "#F8F6F2", border: "2px dashed", borderRadius: 10, padding: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 130, marginTop: 8 },
-  warningBox: { background: "#2a1f10", border: "1px solid #553", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#cc9", marginBottom: 14 },
+  warningBox: { background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 10, padding: "11px 14px", fontSize: 13, color: "#7A5C00", marginBottom: 14, fontFamily: "'Inter',sans-serif", fontWeight: 500 },
 
-  unlockChecklist: { background: "#fff", borderRadius: 10, padding: 16 },
-  checkItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#444", marginBottom: 8 },
+  unlockChecklist: { background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #E0DBD0" },
+  checkItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#333", marginBottom: 10, fontFamily: "'Inter',sans-serif", fontWeight: 500 },
 };
 
 const CSS = `
   @keyframes spin { to { transform: rotate(360deg); } }
   * { box-sizing: border-box; }
+  body { background: #F0EDE6; -webkit-tap-highlight-color: transparent; }
   ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: #111; }
-  ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  ::-webkit-scrollbar-track { background: #F0EDE6; }
+  ::-webkit-scrollbar-thumb { background: #D5D0C8; border-radius: 2px; }
   div[style*="typingDots"] span {
     width: 6px; height: 6px; background: #555; border-radius: 50%;
     animation: bounce 1.2s infinite;
@@ -510,4 +513,12 @@ const CSS = `
   div[style*="typingDots"] span:nth-child(2) { animation-delay: 0.2s; }
   div[style*="typingDots"] span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes bounce { 0%,80%,100% { transform: scale(0.7); opacity:0.5; } 40% { transform: scale(1); opacity:1; } }
+
+  /* Hover effects */
+  button:hover { opacity: 0.88; }
+  .opt-btn:hover { border-color: #C8A84B !important; background: #FFF8E7 !important; }
+  .chap-pill:hover { background: #F0EDE6 !important; }
+  .sugg-btn:hover { border-color: #C8A84B !important; background: #FFF8E7 !important; color: #1A1A1A !important; }
+  .tab-btn:hover { color: #555 !important; }
+  .back-btn:hover { background: #F0EDE6 !important; border-color: #C8A84B !important; }
 `;
