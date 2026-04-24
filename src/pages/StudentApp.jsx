@@ -106,7 +106,7 @@ export default function StudentApp() {
 
       {showGam && <GamificationWidget onClose={() => { setShowGam(false); setGamState(getGamState()); }} />}
       <main style={S.main}>
-        {view === "dashboard" && <Dashboard pct={pct} doneAll={doneAll} totalAll={totalAll} doneOf={doneOf} totalOf={totalOf} setView={setView} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
+        {view === "dashboard" && <Dashboard pct={pct} doneAll={doneAll} totalAll={totalAll} doneOf={doneOf} totalOf={totalOf} setView={setView} unlockedChapters={unlockedChapters} setOpen={setOpen} user={user} />}
         {view === "plan"      && <Plan activeWeek={activeWeek} setActiveWeek={setActiveWeek} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
         {view === "progress"  && <Progress doneOf={doneOf} totalOf={totalOf} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
       </main>
@@ -182,7 +182,7 @@ function BottomNav({ view, setView }) {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
-function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedChapters, setOpen }) {
+function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedChapters, setOpen, user }) {
   const curWeek = WEEKS.find(w => getWeekStatus(w) === "current");
   const quip = getQuip(doneAll(), totalAll());
 
