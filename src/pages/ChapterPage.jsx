@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { cloudGet, cloudSet } from "../utils/cloudStorage.js";
 import { ls } from "../utils/storage.js";
 import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
@@ -7,15 +8,31 @@ import { recordContentRead, recordChatMessage, recordQuizAttempt, recordScreensh
 
 // ── CHAPTER PAGE ─────────────────────────────────────────────────────────────
 // Tab flow: Conținut → Chat → Quiz → Screenshot → (unlocks chapter)
-export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
+export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlock }) {
   const sub     = SUBJECTS[subject];
   const chapter = sub.chapters.find(c => c.id === chapterId);
-  const storageKey = `chapter_${chapterId}`;
+  const storageKey = userId ? `chapter_${chapterId}` : `chapter_${chapterId}`;
+  const cloudKey = `chapter_${chapterId}`;
 
   const [tab, setTab]           = useState("content");   // content|chat|quiz|screenshot
+  const [cloudLoaded, setCloudLoaded] = useState(false);
 
-  // Log chapter opened
-  useEffect(() => { logger.chapterOpened(chapter, subject); }, []);
+  // Log chapter opened + load from cloud
+  useEffect(() => {
+    logger.chapterOpened(chapter, subject);
+    cloudGet(cloudKey).then(val => {
+      if (val) {
+        setSaved(val);
+        if (val.content) setContent(val.content);
+        if (val.chatHistory) setChatHistory(val.chatHistory);
+        if (val.quiz) setQuiz(val.quiz);
+        if (val.quizAnswers) setAnswers(val.quizAnswers);
+        if (val.quizResult) setQuizResult(val.quizResult);
+        if (val.screenshot) setScreenshot(val.screenshot);
+      }
+      setCloudLoaded(true);
+    });
+  }, [userId]);
   const [saved, setSaved]       = useState(() => ls.get(storageKey) || {});
 
   // content
@@ -49,7 +66,8 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   function persist(patch) {
     const updated = { ...saved, ...patch };
     setSaved(updated);
-    ls.set(storageKey, updated);
+    ls.set(storageKey, updated); // local cache
+    cloudSet(cloudKey, updated); // cloud sync
   }
 
   // Scroll chat to bottom

@@ -12,6 +12,8 @@ export default function AdminApp({ onLogout }) {
   const [sending, setSending]     = useState(false);
   const [toast, setToast]         = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
+  const [allUsers, setAllUsers]       = useState([]);
+  const [usersLoading, setUL2]        = useState(false);
 
   useEffect(() => {
     function load() { setUL(ls.get("unlocked") || {}); }
@@ -21,6 +23,18 @@ export default function AdminApp({ onLogout }) {
   }, []);
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3000); }
+
+  async function loadUsers() {
+    setUL2(true);
+    try {
+      const res = await fetch("/api/admin-users", {
+        headers: { Authorization: `Bearer ${process.env.ADMIN_SECRET || btoa("Babel2012")}` },
+      });
+      const data = await res.json();
+      if (data.ok) setAllUsers(data.users || []);
+    } catch (e) { console.error(e); }
+    setUL2(false);
+  }
 
   function doneOf(s) { return SUBJECTS[s].chapters.filter(c => unlockedChapters[c.id]).length; }
   function totalOf(s) { return SUBJECTS[s].chapters.length; }
@@ -92,6 +106,7 @@ export default function AdminApp({ onLogout }) {
           { id: "email",       icon: "✉️",  label: "Email" },
           { id: "detail",      icon: "📋", label: "Detaliu" },
           { id: "logs",        icon: "📡", label: "Loguri" },
+          { id: "users",       icon: "👥", label: "Elevi" },
         ].map(i => (
           <button key={i.id} style={{ ...S.navBtn, ...(view === i.id ? S.navOn : {}) }} onClick={() => setView(i.id)}>
             <span style={{ fontSize: 18, lineHeight: 1 }}>{i.icon}</span><span>{i.label}</span>
@@ -220,6 +235,10 @@ export default function AdminApp({ onLogout }) {
             </>
           )}
 
+          {view === "users" && (
+            <UsersView users={allUsers} loading={usersLoading} onLoad={loadUsers} />
+          )}
+
           {view === "logs" && (
             <LogsView />
           )}
@@ -264,6 +283,61 @@ export default function AdminApp({ onLogout }) {
 
       {toast && <div style={S.toast}>{toast}</div>}
       <style>{`* { box-sizing: border-box; } ::-webkit-scrollbar { display: none; } body { background: #F0EDE6; }`}</style>
+    </div>
+  );
+}
+
+function UsersView({ users, loading, onLoad }) {
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" }}>
+          👥 Elevi înregistrați ({users.length})
+        </div>
+        <button style={{ background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Inter',sans-serif", fontWeight: 600 }}
+          onClick={onLoad}>
+          {loading ? "Se încarcă..." : "🔄 Reîncarcă"}
+        </button>
+      </div>
+      {users.length === 0 && !loading && (
+        <div style={{ color: "#AAA", fontStyle: "italic", fontSize: 13, textAlign: "center", padding: "30px 0" }}>
+          Apasă Reîncarcă pentru a vedea elevii
+        </div>
+      )}
+      {users.map(u => (
+        <div key={u.userId} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: "1px solid #E0DBD0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" }}>{u.name}</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{u.email}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#C8A84B", fontFamily: "'Syne',sans-serif" }}>⚡ {u.stats?.totalXP || 0} XP</div>
+              {u.stats?.currentStreak > 0 && <div style={{ fontSize: 11, color: "#E65100" }}>🔥 {u.stats.currentStreak} zile streak</div>}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Stat2 label="Capitole bifate" value={`${u.stats?.unlockedChapters || 0}/15`} color="#2E7D32" />
+            <Stat2 label="Quiz-uri trecute" value={u.stats?.quizzesPassed || 0} color="#1A5276" />
+            {u.stats?.avgQuizScore && <Stat2 label="Medie quiz" value={`${u.stats.avgQuizScore}/10`} color="#C8A84B" />}
+            {u.stats?.lastSeen && <Stat2 label="Ultima activitate" value={new Date(u.stats.lastSeen).toLocaleDateString("ro-RO")} color="#888" />}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ height: 6, background: "#F0EDE6", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round(((u.stats?.unlockedChapters || 0) / 15) * 100)}%`, background: "#C8A84B", borderRadius: 3 }} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Stat2({ label, value, color }) {
+  return (
+    <div style={{ background: "#F8F6F2", borderRadius: 8, padding: "5px 10px", border: "1px solid #E0DBD0" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color, fontFamily: "'Syne',sans-serif" }}>{value}</div>
+      <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'Inter',sans-serif" }}>{label}</div>
     </div>
   );
 }

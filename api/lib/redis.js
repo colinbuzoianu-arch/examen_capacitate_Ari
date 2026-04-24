@@ -1,9 +1,10 @@
-// lib/redis.js — Upstash Redis REST API wrapper
+// api/lib/redis.js — Upstash Redis REST API wrapper
+// Exported redisCmd for use by auth.js
 
 const url   = () => process.env.ari_KV_REST_API_URL;
 const token = () => process.env.ari_KV_REST_API_TOKEN;
 
-async function redisCmd(...args) {
+export async function redisCmd(...args) {
   const res = await fetch(url(), {
     method: "POST",
     headers: {
@@ -41,26 +42,25 @@ export async function getLogDays() {
   return result.map(k => k.replace("logs:", "")).sort().reverse().slice(0, 30);
 }
 
-export async function setChapterStat(chapterId, data) {
-  await redisCmd("SET", `chapter:${chapterId}`, JSON.stringify(data));
+export async function setChapterStat(userId, chapterId, data) {
+  await redisCmd("SET", `chapterstat:${userId}:${chapterId}`, JSON.stringify(data));
 }
 
-// NEW: get single chapter stat
-export async function getChapterStat(chapterId) {
-  const val = await redisCmd("GET", `chapter:${chapterId}`);
+export async function getChapterStat(userId, chapterId) {
+  const val = await redisCmd("GET", `chapterstat:${userId}:${chapterId}`);
   if (!val) return null;
   return typeof val === "string" ? JSON.parse(val) : val;
 }
 
-export async function getAllChapterStats() {
-  const keys = await redisCmd("KEYS", "chapter:*");
+export async function getAllChapterStats(userId) {
+  const keys = await redisCmd("KEYS", `chapterstat:${userId}:*`);
   if (!keys || !Array.isArray(keys) || keys.length === 0) return {};
   const result = {};
   for (const key of keys) {
     const val = await redisCmd("GET", key);
     if (val) {
       try {
-        const chId = key.replace("chapter:", "");
+        const chId = key.replace(`chapterstat:${userId}:`, "");
         result[chId] = typeof val === "string" ? JSON.parse(val) : val;
       } catch {}
     }

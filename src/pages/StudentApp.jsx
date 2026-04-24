@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { ls } from "../utils/storage.js";
+import { cloudGet, cloudSet } from "../utils/cloudStorage.js";
+import { ls } from "../utils/storage.js"; // fallback for sync reads
 import { sendEmail } from "../utils/api.js";
 import { SUBJECTS, WEEKS, WEEKLY_PLAN, EXAM_ROMANA, EXAM_MATH, fmt, daysLeft, getWeekStatus, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
 import { chapterUnlockEmailHtml } from "../utils/emailTemplates.js";
 import ChapterPage from "./ChapterPage.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import GamificationWidget from "./GamificationWidget.jsx";
 import { getGamState, getLevel, getLevelProgress, recordChapterUnlock, BADGES } from "../utils/gamification.js";
 
@@ -22,13 +24,19 @@ function getQuip(done, total) {
 }
 
 export default function StudentApp() {
+  const { user } = useAuth();
   const [view, setView]             = useState("dashboard");
   const [openChapter, setOpen]      = useState(null);
-  const [unlockedChapters, setUL]   = useState(() => ls.get("unlocked") || {});
+  const [unlockedChapters, setUL]   = useState({});
   const [activeWeek, setActiveWeek] = useState(() => {
     const cur = WEEKS.find(w => getWeekStatus(w) === "current") || WEEKS[0];
     return cur.id;
   });
+
+  // Load progress from cloud on mount
+  useEffect(() => {
+    cloudGet("unlocked").then(val => { if (val) setUL(val); });
+  }, [user?.userId]);
   const [toast, setToast]         = useState(null);
   const [showGam, setShowGam]       = useState(false);
   const [gamState, setGamState]     = useState(() => getGamState());
@@ -38,7 +46,7 @@ export default function StudentApp() {
   function handleUnlock(chapterId) {
     const updated = { ...unlockedChapters, [chapterId]: true };
     setUL(updated);
-    ls.set("unlocked", updated);
+    cloudSet("unlocked", updated);
     logger.chapterUnlocked({ id: chapterId, title: chapterId }, "unknown");
     // Record gamification
     const roChaps = SUBJECTS.romana.chapters;
@@ -47,11 +55,13 @@ export default function StudentApp() {
     const roComplete = roChaps.every(c => newUnlocked[c.id]);
     const maComplete = maChaps.every(c => newUnlocked[c.id]);
     recordChapterUnlock(Object.keys(newUnlocked).length, roComplete, maComplete);
-    setGamState(getGamState());
+    const gState = getGamState();
+    setGamState(gState);
+    cloudSet("gamification", gStateNew);
     showToast("🎉 Capitol bifat! Bravo Ari!");
     const ch = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(c => c.id === chapterId);
     const chapData = ls.get(`chapter_${chapterId}`) || {};
-    const gState   = getGamState();
+    const gStateNew = getGamState();
     sendEmail({
       to: [CONFIG.parentEmail, CONFIG.motherEmail],
       subject: `🏆 Ari a bifat: ${ch?.title}`,
@@ -78,7 +88,7 @@ export default function StudentApp() {
     return (
       <>
         <ChapterPage chapterId={openChapter.chapterId} subject={openChapter.subject}
-          onBack={() => setOpen(null)} onUnlock={handleUnlock} />
+          userId={user?.userId} onBack={() => setOpen(null)} onUnlock={handleUnlock} />
         {toast && <Toast msg={toast} />}
       </>
     );
