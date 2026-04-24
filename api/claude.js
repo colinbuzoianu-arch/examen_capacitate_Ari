@@ -1,19 +1,23 @@
 // api/claude.js — Vercel Serverless Function
 // Proxies requests to Anthropic API, keeping the key server-side
 
+export const config = {
+  maxDuration: 30, // extend Vercel timeout to 30s for quiz/content generation
+};
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
 
-  const { messages, system } = req.body;
+  const { messages, system, max_tokens } = req.body;
   if (!messages?.length) return res.status(400).json({ error: "Missing messages" });
 
   try {
     const body = {
       model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      max_tokens: max_tokens || 2000,
       messages,
     };
     if (system) body.system = system;

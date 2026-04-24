@@ -31,6 +31,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   // quiz
   const [quiz, setQuiz]             = useState(saved.quiz || null);
   const [loadingQuiz, setLQ]        = useState(false);
+  const [quizError, setQuizError]   = useState(null);
   const [answers, setAnswers]       = useState(saved.quizAnswers || {});
   const [quizResult, setQuizResult] = useState(saved.quizResult || null);
   const [evaluating, setEvaluating] = useState(false);
@@ -64,7 +65,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       logger.contentGenerated(chapter, subject);
       recordContentRead();
     } catch (e) {
-      setContent("❌ Eroare la generarea conținutului. Verifică conexiunea și API key-ul.");
+      setContent("❌ Nu s-a putut genera lecția după 3 încercări. Verifică conexiunea la internet și încearcă din nou.");
     }
     setLC(false);
   }
@@ -98,15 +99,17 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   // ── Quiz ────────────────────────────────────────────────────────────────────
   async function loadQuiz() {
     setLQ(true);
+    setQuizError(null);
     logger.quizStarted(chapter, subject);
     try {
       const q = await generateQuiz(chapter);
       setQuiz(q);
       setAnswers({});
       setQuizResult(null);
+      setQuizError(null);
       persist({ quiz: q, quizAnswers: {}, quizResult: null });
     } catch (e) {
-      alert("Eroare la generarea quiz-ului. Încearcă din nou.");
+      setQuizError(e.message || "Eroare la generarea quiz-ului.");
     }
     setLQ(false);
   }
@@ -220,8 +223,14 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
         {tab === "content" && (
           <div>
             {loadingContent ? (
-              <div style={S.loading}><Spinner /> <span>Claude generează lecția pentru tine...</span></div>
-            ) : content ? (
+              <div style={S.loading}>
+                <Spinner />
+                <div>
+                  <div style={{ fontSize: 13, color: "#555" }}>Claude generează lecția pentru tine...</div>
+                  <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>Prima generare durează ~15 secunde. Se salvează local după aceea.</div>
+                </div>
+              </div>
+) : content ? (
               <div style={S.mdContent} dangerouslySetInnerHTML={{ __html: renderMd(content) }} />
             ) : (
               <div style={S.emptyState}>
@@ -290,7 +299,13 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
         {/* ── QUIZ ── */}
         {tab === "quiz" && (
           <div>
-            {!quiz && !loadingQuiz && (
+            {quizError && (
+              <div style={{ background: "#FFF0EE", border: "1px solid #FFCDD2", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+                <div style={{ fontSize: 13, color: "#C62828", fontWeight: 600, marginBottom: 6 }}>❌ {quizError}</div>
+                <button style={{ ...S.btnY, width: "auto", marginTop: 0 }} onClick={() => { setQuizError(null); loadQuiz(); }}>🔄 Încearcă din nou</button>
+              </div>
+            )}
+            {!quiz && !loadingQuiz && !quizError && (
               <div style={S.emptyState}>
                 <div style={{ fontSize: 40 }}>🧠</div>
                 <p style={{ color: "#888", fontSize: 14 }}>
@@ -304,7 +319,13 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
             )}
 
             {loadingQuiz && (
-              <div style={S.loading}><Spinner /> <span>Claude generează întrebările...</span></div>
+              <div style={S.loading}>
+                <Spinner />
+                <div>
+                  <div style={{ fontSize: 13, color: "#555" }}>Claude generează întrebările...</div>
+                  <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>Poate dura 10-20 secunde. Se reîncearcă automat dacă e nevoie.</div>
+                </div>
+              </div>
             )}
 
             {quiz && !loadingQuiz && (
