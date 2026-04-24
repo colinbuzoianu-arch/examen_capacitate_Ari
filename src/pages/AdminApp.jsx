@@ -40,7 +40,7 @@ export default function AdminApp({ onLogout }) {
     const done = chs.filter(c => unlockedChapters[c.id]).length;
     const pct = chs.length ? Math.round((done / chs.length) * 100) : 0;
     const res = await sendEmail({
-      to: [CONFIG.studentEmail, CONFIG.motherEmail],
+      to: [CONFIG.studentEmail, CONFIG.parentEmail, CONFIG.motherEmail],
       subject: `📚 Reminder studiu – ${curWeek.label} · EN 2026`,
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
@@ -57,7 +57,7 @@ export default function AdminApp({ onLogout }) {
     if (!manualMsg.trim()) return;
     setSending(true);
     const res = await sendEmail({
-      to: [CONFIG.studentEmail, CONFIG.motherEmail],
+      to: [CONFIG.studentEmail, CONFIG.parentEmail, CONFIG.motherEmail],
       subject: "✉️ Mesaj de la Tata – EN 2026",
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
@@ -177,7 +177,7 @@ export default function AdminApp({ onLogout }) {
               {selectedImg && (
                 <div style={S.lightbox} onClick={() => setSelectedImg(null)}>
                   <img src={selectedImg} alt="" style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: 16 }} />
-                  <div style={{ color: "#1A1A1A", fontSize: 12, marginTop: 12, opacity: 0.6 }}>Apasă oriunde pentru a închide</div>
+                  <div style={{ color: "#fff", fontSize: 12, marginTop: 12, opacity: 0.7 }}>Apasă oriunde pentru a închide</div>
                 </div>
               )}
             </>
@@ -190,7 +190,7 @@ export default function AdminApp({ onLogout }) {
                 <p style={{ fontSize: 12, color: "#777", margin: "8px 0 14px", lineHeight: 1.6 }}>
                   Trimite un email cu progresul săptămânii curente. Include bara de progres și link la aplicație.
                 </p>
-                <div style={{ fontSize: 11, color: "#999", marginBottom: 12 }}>Către: {CONFIG.studentEmail}</div>
+                <div style={{ fontSize: 11, color: "#777", marginBottom: 12 }}>Către: {CONFIG.studentEmail}, {CONFIG.parentEmail}, {CONFIG.motherEmail}</div>
                 <button style={{ ...S.btnDark, opacity: sending ? 0.5 : 1 }} onClick={sendReminder} disabled={sending}>
                   {sending ? "Se trimite..." : "📨 Trimite reminder acum"}
                 </button>
@@ -204,7 +204,7 @@ export default function AdminApp({ onLogout }) {
                 <textarea value={manualMsg} onChange={e => setManualMsg(e.target.value)}
                   placeholder="Ex: Ari, am văzut că ai bifat primul capitol! Continuă așa! 💪"
                   style={S.textarea} rows={5} />
-                <div style={{ fontSize: 11, color: "#999", margin: "6px 0 12px" }}>Către: {CONFIG.studentEmail}</div>
+                <div style={{ fontSize: 11, color: "#777", margin: "6px 0 12px" }}>Către: {CONFIG.studentEmail}, {CONFIG.parentEmail}, {CONFIG.motherEmail}</div>
                 <button style={{ ...S.btnDark, opacity: (manualMsg.trim() && !sending) ? 1 : 0.4 }}
                   onClick={sendManualMessage} disabled={!manualMsg.trim() || sending}>
                   {sending ? "Se trimite..." : "📨 Trimite mesajul"}
@@ -300,7 +300,7 @@ const S = {
   cpImg: { width: "100%", height: 110, objectFit: "cover" },
   lightbox: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 500, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "zoom-out" },
   textarea: { width: "100%", background: "#F8F6F2", color: "#1A1A1A", border: "1px solid #E0DBD0", borderRadius: 10, padding: "10px 12px", fontSize: 12, resize: "vertical", fontFamily: "'Inter',sans-serif", outline: "none" },
-  btnDark: { background: "#1A1A1A", color: "#1A1A1A", border: "none", borderRadius: 10, padding: "11px 18px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "'Syne',sans-serif", width: "100%" },
+  btnDark: { background: "#1A1A1A", color: "#FFFFFF", border: "none", borderRadius: 10, padding: "11px 18px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "'Syne',sans-serif", width: "100%" },
   detailRow: { display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderRadius: 8, marginBottom: 4, border: "1px solid #E0DBD0" },
-  toast: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#1A1A1A", color: "#1A1A1A", fontWeight: 600, padding: "10px 22px", borderRadius: 20, zIndex: 400, fontSize: 13, boxShadow: "0 4px 24px rgba(0,0,0,.15)", whiteSpace: "nowrap" },
+  toast: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#1A1A1A", color: "#FFFFFF", fontWeight: 600, padding: "10px 22px", borderRadius: 20, zIndex: 400, fontSize: 13, boxShadow: "0 4px 24px rgba(0,0,0,.15)", whiteSpace: "nowrap" },
 };
