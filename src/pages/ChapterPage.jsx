@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { ls } from "../utils/storage.js";
 import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
+import { logger } from "../utils/logger.js";
 
 // ── CHAPTER PAGE ─────────────────────────────────────────────────────────────
 // Tab flow: Conținut → Chat → Quiz → Screenshot → (unlocks chapter)
@@ -11,6 +12,9 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   const storageKey = `chapter_${chapterId}`;
 
   const [tab, setTab]           = useState("content");   // content|chat|quiz|screenshot
+
+  // Log chapter opened
+  useEffect(() => { logger.chapterOpened(chapter, subject); }, []);
   const [saved, setSaved]       = useState(() => ls.get(storageKey) || {});
 
   // content
@@ -56,6 +60,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       const text = await generateChapterContent(chapter);
       setContent(text);
       persist({ content: text });
+      logger.contentGenerated(chapter, subject);
     } catch (e) {
       setContent("❌ Eroare la generarea conținutului. Verifică conexiunea și API key-ul.");
     }
@@ -79,6 +84,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       const fullHistory = [...newHistory, { role: "assistant", content: reply }];
       setChatHistory(fullHistory);
       persist({ chatHistory: fullHistory });
+      logger.chatMessage(chapter, subject, msg, reply);
     } catch {
       const err = [...newHistory, { role: "assistant", content: "❌ Eroare. Încearcă din nou." }];
       setChatHistory(err);
@@ -89,6 +95,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   // ── Quiz ────────────────────────────────────────────────────────────────────
   async function loadQuiz() {
     setLQ(true);
+    logger.quizStarted(chapter, subject);
     try {
       const q = await generateQuiz(chapter);
       setQuiz(q);
@@ -118,6 +125,9 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       const result = await evaluateQuiz(chapter, quiz.questions, answers);
       setQuizResult(result);
       persist({ quizResult: result });
+      const attemptNum = (saved.quizAttempts || 0) + 1;
+      persist({ quizAttempts: attemptNum });
+      logger.quizSubmitted(chapter, subject, result.score, result.passed, answers, quiz.questions, attemptNum);
       if (result.passed) {
         // check if we can unlock
         if (hasScreenshot) { onUnlock(chapterId); }
@@ -141,6 +151,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       const img = ev.target.result;
       setScreenshot(img);
       persist({ screenshot: img });
+      logger.screenshotUploaded(chapter, subject);
       if (quizPassed) onUnlock(chapterId);
     };
     reader.readAsDataURL(file);

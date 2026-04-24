@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ls } from "../utils/storage.js";
 import { sendEmail } from "../utils/api.js";
+import { logger } from "../utils/logger.js";
 import { SUBJECTS, WEEKS, WEEKLY_PLAN, EXAM_ROMANA, EXAM_MATH, fmt, daysLeft, getWeekStatus, CONFIG } from "../constants.js";
 import ChapterPage from "./ChapterPage.jsx";
 
@@ -33,6 +34,7 @@ export default function StudentApp() {
     const updated = { ...unlockedChapters, [chapterId]: true };
     setUL(updated);
     ls.set("unlocked", updated);
+    logger.chapterUnlocked({ id: chapterId, title: ch?.title || chapterId }, "unknown");
     showToast("🎉 Capitol bifat! Bravo Ari!");
     const ch = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(c => c.id === chapterId);
     sendEmail({

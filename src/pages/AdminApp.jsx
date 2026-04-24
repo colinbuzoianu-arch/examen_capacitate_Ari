@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ls } from "../utils/storage.js";
 import { sendEmail } from "../utils/api.js";
 import { SUBJECTS, WEEKS, WEEKLY_PLAN, EXAM_ROMANA, EXAM_MATH, fmt, daysLeft, getWeekStatus, CONFIG } from "../constants.js";
+import LogsView from "./LogsView.jsx";
 
 export default function AdminApp({ onLogout }) {
   const [view, setView]           = useState("overview");
@@ -89,6 +90,7 @@ export default function AdminApp({ onLogout }) {
           { id: "screenshots", icon: "📸", label: "Dovezi" },
           { id: "email",       icon: "✉️",  label: "Email" },
           { id: "detail",      icon: "📋", label: "Detaliu" },
+          { id: "logs",        icon: "📡", label: "Loguri" },
         ].map(i => (
           <button key={i.id} style={{ ...S.navBtn, ...(view === i.id ? S.navOn : {}) }} onClick={() => setView(i.id)}>
             <span style={{ fontSize: 18, lineHeight: 1 }}>{i.icon}</span><span>{i.label}</span>
@@ -215,6 +217,10 @@ export default function AdminApp({ onLogout }) {
                 </p>
               </div>
             </>
+          )}
+
+          {view === "logs" && (
+            <LogsView cronSecret={CONFIG.adminPasswordB64} />
           )}
 
           {view === "detail" && (
