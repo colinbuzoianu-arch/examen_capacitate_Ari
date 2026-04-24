@@ -3,6 +3,7 @@ import { ls } from "../utils/storage.js";
 import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
+import { recordContentRead, recordChatMessage, recordQuizAttempt, recordScreenshot } from "../utils/gamification.js";
 
 // ── CHAPTER PAGE ─────────────────────────────────────────────────────────────
 // Tab flow: Conținut → Chat → Quiz → Screenshot → (unlocks chapter)
@@ -61,6 +62,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       setContent(text);
       persist({ content: text });
       logger.contentGenerated(chapter, subject);
+      recordContentRead();
     } catch (e) {
       setContent("❌ Eroare la generarea conținutului. Verifică conexiunea și API key-ul.");
     }
@@ -85,6 +87,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       setChatHistory(fullHistory);
       persist({ chatHistory: fullHistory });
       logger.chatMessage(chapter, subject, msg, reply);
+      recordChatMessage();
     } catch {
       const err = [...newHistory, { role: "assistant", content: "❌ Eroare. Încearcă din nou." }];
       setChatHistory(err);
@@ -128,6 +131,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       const attemptNum = (saved.quizAttempts || 0) + 1;
       persist({ quizAttempts: attemptNum });
       logger.quizSubmitted(chapter, subject, result.score, result.passed, answers, quiz.questions, attemptNum);
+      recordQuizAttempt(result.score, result.passed);
       if (result.passed) {
         // check if we can unlock
         if (hasScreenshot) { onUnlock(chapterId); }
@@ -152,6 +156,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       setScreenshot(img);
       persist({ screenshot: img });
       logger.screenshotUploaded(chapter, subject);
+      recordScreenshot();
       if (quizPassed) onUnlock(chapterId);
     };
     reader.readAsDataURL(file);
@@ -179,11 +184,17 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
 
       {/* Unlock progress bar */}
       <div style={S.unlockBar}>
-        <div style={{ ...S.unlockStep, background: quizPassed ? "#6BCB77" : "#333" }}>
+        <div style={{ ...S.unlockStep,
+          background: quizPassed ? "#E8F5E9" : "#F0EDE6",
+          color: quizPassed ? "#2E7D32" : "#999",
+          border: `1px solid ${quizPassed ? "#A5D6A7" : "#D5D0C8"}` }}>
           {quizPassed ? "✓" : "1"} Quiz 8/10
         </div>
         <div style={S.unlockLine} />
-        <div style={{ ...S.unlockStep, background: hasScreenshot ? "#6BCB77" : "#333" }}>
+        <div style={{ ...S.unlockStep,
+          background: hasScreenshot ? "#E8F5E9" : "#F0EDE6",
+          color: hasScreenshot ? "#2E7D32" : "#999",
+          border: `1px solid ${hasScreenshot ? "#A5D6A7" : "#D5D0C8"}` }}>
           {hasScreenshot ? "✓" : "2"} Screenshot
         </div>
         <div style={S.unlockLine} />

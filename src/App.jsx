@@ -61,10 +61,10 @@ export default function App() {
 }
 
 const S = {
-  toggle: { position:"fixed",top:0,right:0,zIndex:500,display:"flex",background:"#fff",borderBottomLeftRadius:12,overflow:"hidden",border:"1px solid #E0DBD0",borderTop:"none",borderRight:"none",boxShadow:"0 2px 8px rgba(0,0,0,.06)" },
-  tBtn: { background:"none",border:"none",color:"#AAA",padding:"6px 14px",cursor:"pointer",fontSize:12,fontFamily:"'Inter',sans-serif" },
-  tBtnOnY: { color:"#C8A84B",borderBottom:"2px solid #C8A84B" },
-  tBtnOnG: { color:"#52A852",borderBottom:"2px solid #52A852" },
+  toggle: { position:"fixed",bottom:70,right:12,zIndex:500,display:"flex",background:"#fff",borderRadius:20,overflow:"hidden",border:"1px solid #E0DBD0",boxShadow:"0 2px 12px rgba(0,0,0,.10)" },
+  tBtn: { background:"none",border:"none",color:"#AAA",padding:"7px 14px",cursor:"pointer",fontSize:12,fontFamily:"'Inter',sans-serif",fontWeight:600,whiteSpace:"nowrap" },
+  tBtnOnY: { color:"#C8A84B",background:"#FFF8E7" },
+  tBtnOnG: { color:"#2E7D32",background:"#E8F5E9" },
   overlay: { position:"fixed",inset:0,background:"rgba(20,18,14,0.65)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20 },
   modal: { background:"#fff",borderRadius:20,padding:28,width:"100%",maxWidth:340,border:"1px solid #E8E4DC" },
   modalTitle: { fontSize:20,fontWeight:800,color:"#1A1A1A",marginBottom:6,fontFamily:"'Syne',sans-serif" },

@@ -175,15 +175,27 @@ export function generateWeeks() {
 export const WEEKS = generateWeeks();
 
 export function buildWeeklyPlan() {
-  const all = [
-    ...SUBJECTS.romana.chapters.map(c => ({ ...c, subject: "romana" })),
-    ...SUBJECTS.matematica.chapters.map(c => ({ ...c, subject: "matematica" })),
-  ];
-  const plan = {}; WEEKS.forEach(w => { plan[w.id] = []; });
-  all.forEach((ch, i) => {
-    const idx = Math.min(Math.floor((i / all.length) * WEEKS.length), WEEKS.length - 1);
-    plan[WEEKS[idx].id].push(ch);
-  });
+  // Interleave: 1 Română + 1 Matematică per săptămână
+  const romana   = SUBJECTS.romana.chapters.map(c => ({ ...c, subject: "romana" }));
+  const mate     = SUBJECTS.matematica.chapters.map(c => ({ ...c, subject: "matematica" }));
+  const plan     = {};
+  WEEKS.forEach(w => { plan[w.id] = []; });
+
+  const maxLen = Math.max(romana.length, mate.length);
+  let weekIdx  = 0;
+
+  for (let i = 0; i < maxLen; i++) {
+    if (weekIdx >= WEEKS.length) weekIdx = WEEKS.length - 1;
+    if (romana[i]) {
+      plan[WEEKS[weekIdx].id].push(romana[i]);
+    }
+    if (weekIdx >= WEEKS.length) weekIdx = WEEKS.length - 1;
+    if (mate[i]) {
+      plan[WEEKS[weekIdx].id].push(mate[i]);
+    }
+    weekIdx++;
+  }
+
   return plan;
 }
 export const WEEKLY_PLAN = buildWeeklyPlan();

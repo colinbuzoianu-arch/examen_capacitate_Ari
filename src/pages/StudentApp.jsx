@@ -3,7 +3,10 @@ import { ls } from "../utils/storage.js";
 import { sendEmail } from "../utils/api.js";
 import { SUBJECTS, WEEKS, WEEKLY_PLAN, EXAM_ROMANA, EXAM_MATH, fmt, daysLeft, getWeekStatus, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
+import { chapterUnlockEmailHtml } from "../utils/emailTemplates.js";
 import ChapterPage from "./ChapterPage.jsx";
+import GamificationWidget from "./GamificationWidget.jsx";
+import { getGamState, getLevel, getLevelProgress, recordChapterUnlock, BADGES } from "../utils/gamification.js";
 
 // ── Motivational quips ────────────────────────────────────────────────────────
 function getQuip(done, total) {
@@ -26,7 +29,9 @@ export default function StudentApp() {
     const cur = WEEKS.find(w => getWeekStatus(w) === "current") || WEEKS[0];
     return cur.id;
   });
-  const [toast, setToast] = useState(null);
+  const [toast, setToast]         = useState(null);
+  const [showGam, setShowGam]       = useState(false);
+  const [gamState, setGamState]     = useState(() => getGamState());
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3200); }
 
@@ -35,12 +40,32 @@ export default function StudentApp() {
     setUL(updated);
     ls.set("unlocked", updated);
     logger.chapterUnlocked({ id: chapterId, title: chapterId }, "unknown");
+    // Record gamification
+    const roChaps = SUBJECTS.romana.chapters;
+    const maChaps = SUBJECTS.matematica.chapters;
+    const newUnlocked = { ...unlockedChapters, [chapterId]: true };
+    const roComplete = roChaps.every(c => newUnlocked[c.id]);
+    const maComplete = maChaps.every(c => newUnlocked[c.id]);
+    recordChapterUnlock(Object.keys(newUnlocked).length, roComplete, maComplete);
+    setGamState(getGamState());
     showToast("🎉 Capitol bifat! Bravo Ari!");
     const ch = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(c => c.id === chapterId);
+    const chapData = ls.get(`chapter_${chapterId}`) || {};
+    const gState   = getGamState();
     sendEmail({
       to: [CONFIG.parentEmail, CONFIG.motherEmail],
-      subject: `✅ Ari a finalizat: ${ch?.title}`,
-      html: emailTpl(`🏆 Capitol bifat!`, `Ari a trecut quiz-ul și a încărcat dovada pentru <strong>${ch?.title}</strong>.`, "Vezi progresul →"),
+      subject: `🏆 Ari a bifat: ${ch?.title}`,
+      html: chapterUnlockEmailHtml({
+        studentName: CONFIG.studentName,
+        chapterTitle: ch?.title || chapterId,
+        subject: [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(x => x.id === chapterId)?.subject || "romana",
+        score: chapData.quizResult?.score || 0,
+        totalXP: gState.totalXP || 0,
+        streak: gState.currentStreak || 0,
+        chaptersUnlocked: Object.keys(updated).length,
+        totalChapters: SUBJECTS.romana.chapters.length + SUBJECTS.matematica.chapters.length,
+        appUrl: window.location.origin,
+      }),
     });
   }
 
@@ -61,11 +86,15 @@ export default function StudentApp() {
 
   const pct = Math.round((doneAll() / totalAll()) * 100);
 
+  const level = getLevel(gamState.totalXP || 0);
+  const lvlPct = getLevelProgress(gamState.totalXP || 0);
+
   return (
     <div style={S.shell}>
-      <Header doneAll={doneAll} totalAll={totalAll} />
+      <Header gamState={gamState} onXpClick={() => setShowGam(true)} />
       <BottomNav view={view} setView={setView} />
 
+      {showGam && <GamificationWidget onClose={() => { setShowGam(false); setGamState(getGamState()); }} />}
       <main style={S.main}>
         {view === "dashboard" && <Dashboard pct={pct} doneAll={doneAll} totalAll={totalAll} doneOf={doneOf} totalOf={totalOf} setView={setView} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
         {view === "plan"      && <Plan activeWeek={activeWeek} setActiveWeek={setActiveWeek} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
@@ -78,36 +107,49 @@ export default function StudentApp() {
   );
 }
 
-// ── EMAIL TEMPLATE ────────────────────────────────────────────────────────────
-function emailTpl(title, body, btnLabel) {
-  const url = window.location.origin;
-  return `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;"><div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;"><h1 style="color:#1A1A1A;font-size:20px;margin:0 0 10px;">${title}</h1><p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 20px;">${body}</p><a href="${url}" style="display:inline-block;background:#1A1A1A;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px;">${btnLabel}</a></div></div>`;
-}
-
 // ── HEADER ────────────────────────────────────────────────────────────────────
-function Header({ doneAll, totalAll }) {
+function Header({ gamState, onXpClick }) {
+  const totalXP = gamState?.totalXP || 0;
+  const streak  = gamState?.currentStreak || 0;
   return (
     <header style={S.header}>
-      <div>
-        <div style={S.logo}>EN<span style={{ color: "#C8A84B" }}>'26</span></div>
-        <div style={S.logoSub}>Planul lui Ari · Babel</div>
+      {/* Logo row */}
+      <div style={S.headerTop}>
+        <div>
+          <div style={S.logo}>EN<span style={{ color: "#C8A84B" }}>'26</span> · Ari</div>
+          <div style={S.logoSub}>Evaluarea Națională · Babel Timișoara</div>
+        </div>
+        {/* XP chip — right side of logo row */}
+        <button onClick={onXpClick} style={S.xpChip}>
+          <span style={S.xpChipXP}>⚡ {totalXP} XP</span>
+          {streak > 0 && <span style={S.xpChipStreak}> · 🔥{streak}</span>}
+        </button>
       </div>
-      <div style={S.cds}>
-        <Cd label="Română" days={daysLeft(EXAM_ROMANA)} color="#C8392B" />
-        <Cd label="Mate"   days={daysLeft(EXAM_MATH)}   color="#1A5276" />
+      {/* Countdown row — separate, full width */}
+      <div style={S.countdownRow}>
+        <CdPill label="Română" date="22 Iunie" days={daysLeft(EXAM_ROMANA)} color="#C8392B" bg="#FFF5F5" border="#FFCDD2" />
+        <CdPill label="Matematică" date="24 Iunie" days={daysLeft(EXAM_MATH)} color="#1A5276" bg="#EEF4FF" border="#BBDEFB" />
       </div>
     </header>
   );
 }
 
-function Cd({ label, days, color }) {
+function CdPill({ label, date, days, color, bg, border }) {
   return (
-    <div style={{ textAlign: "center", minWidth: 46 }}>
-      <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1, fontFamily: "'Syne',sans-serif" }}>{days}</div>
-      <div style={{ fontSize: 11, color: "#555", fontFamily: "'Inter',sans-serif", marginTop: 2 }}>zile {label}</div>
+    <div style={{ flex:1, background: bg, border:`1px solid ${border}`, borderRadius:10, padding:"8px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+      <div>
+        <div style={{ fontSize:11, color, fontWeight:700, fontFamily:"'Inter',sans-serif", textTransform:"uppercase", letterSpacing:"0.3px" }}>{label}</div>
+        <div style={{ fontSize:13, fontWeight:800, color, fontFamily:"'Syne',sans-serif" }}>{date}</div>
+      </div>
+      <div style={{ textAlign:"right" }}>
+        <div style={{ fontSize:22, fontWeight:800, color, fontFamily:"'Syne',sans-serif", lineHeight:1 }}>{days}</div>
+        <div style={{ fontSize:10, color, fontFamily:"'Inter',sans-serif", opacity:0.7 }}>zile</div>
+      </div>
     </div>
   );
 }
+
+
 
 // ── BOTTOM NAV ────────────────────────────────────────────────────────────────
 function BottomNav({ view, setView }) {
@@ -411,11 +453,15 @@ function Toast({ msg }) {
 const S = {
   shell: { background: "#F0EDE6", minHeight: "100vh", fontFamily: "'Inter',sans-serif", color: "#1A1A1A", paddingBottom: 80 },
 
-  // Header — larger, more visible
-  header: { background: "#fff", borderBottom: "2px solid #E0DBD0", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 8px rgba(0,0,0,.05)" },
-  logo: { fontSize: 22, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif", letterSpacing: "-0.5px", lineHeight: 1 },
-  logoSub: { fontSize: 12, color: "#555", fontFamily: "'Inter',sans-serif", marginTop: 3, fontWeight: 500 },
-  cds: { display: "flex", gap: 18 },
+  // Header — two rows, no overlap
+  header: { background: "#fff", borderBottom: "2px solid #E0DBD0", padding: "12px 16px 12px", boxShadow: "0 2px 8px rgba(0,0,0,.05)" },
+  headerTop: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  logo: { fontSize: 20, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif", letterSpacing: "-0.5px", lineHeight: 1 },
+  logoSub: { fontSize: 11, color: "#888", fontFamily: "'Inter',sans-serif", marginTop: 3 },
+  countdownRow: { display: "flex", gap: 8 },
+  xpChip: { background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 20, padding: "6px 12px", cursor: "pointer", display: "flex", alignItems: "center", fontFamily: "'Syne',sans-serif", whiteSpace: "nowrap" },
+  xpChipXP: { fontSize: 12, fontWeight: 800, color: "#C8A84B" },
+  xpChipStreak: { fontSize: 12, fontWeight: 800, color: "#E65100" },
 
   // Nav — bigger for mobile
   nav: { position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderTop: "2px solid #E0DBD0", display: "flex", zIndex: 100, boxShadow: "0 -2px 8px rgba(0,0,0,.05)" },

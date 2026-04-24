@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ls } from "../utils/storage.js";
 import { sendEmail } from "../utils/api.js";
 import { SUBJECTS, WEEKS, WEEKLY_PLAN, EXAM_ROMANA, EXAM_MATH, fmt, daysLeft, getWeekStatus, CONFIG } from "../constants.js";
+import { reminderEmailHtml } from "../utils/emailTemplates.js";
 import LogsView from "./LogsView.jsx";
 
 export default function AdminApp({ onLogout }) {
