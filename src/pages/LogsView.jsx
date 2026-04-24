@@ -17,21 +17,23 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long" });
 }
 
-export default function LogsView({ cronSecret }) {
+export default function LogsView() {
   const [days, setDays]         = useState([]);
   const [selectedDay, setSelDay]= useState(null);
   const [logs, setLogs]         = useState([]);
   const [stats, setStats]       = useState({});
   const [loading, setLoading]   = useState(false);
+  const [fetchError, setFetchError] = useState(null);
   const [expanded, setExpanded] = useState({});
   const [tab, setTab]           = useState("feed"); // feed | quiz | chat
 
   async function apiFetch(params) {
     const qs = new URLSearchParams(params).toString();
-    const res = await fetch(`/api/get-logs?${qs}`, {
-      headers: { Authorization: `Bearer ${cronSecret}` },
-    });
-    if (!res.ok) throw new Error("Fetch failed");
+    const res = await fetch(`/api/get-logs?${qs}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
     return res.json();
   }
 
@@ -39,15 +41,15 @@ export default function LogsView({ cronSecret }) {
   useEffect(() => {
     (async () => {
       try {
+        setFetchError(null);
         const { days: d } = await apiFetch({ mode: "days" });
         setDays(d || []);
-        if (d && d.length > 0) {
-          setSelDay(d[0]);
-        }
+        if (d && d.length > 0) setSelDay(d[0]);
         const { stats: s } = await apiFetch({ mode: "stats" });
         setStats(s || {});
       } catch (e) {
-        console.error(e);
+        console.error("LogsView fetch error:", e);
+        setFetchError(e.message);
       }
     })();
   }, []);
@@ -72,6 +74,12 @@ export default function LogsView({ cronSecret }) {
 
   return (
     <div>
+      {fetchError && (
+        <div style={{ background: "#FFF0EE", border: "1px solid #FFCDD2", borderRadius: 10, padding: "12px 14px", marginBottom: 14, fontSize: 12, color: "#C62828" }}>
+          ❌ Eroare la încărcarea logurilor: <strong>{fetchError}</strong>
+          <br /><span style={{ color: "#888" }}>Verifică că variabilele Redis sunt setate în Vercel.</span>
+        </div>
+      )}
       {/* Tab switcher */}
       <div style={S.tabRow}>
         {[["feed","📋","Feed activitate"],["quiz","🧠","Quiz-uri"],["chat","💬","Conversații"]].map(([id,icon,label]) => (

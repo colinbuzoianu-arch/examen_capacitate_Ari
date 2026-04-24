@@ -1,15 +1,19 @@
 // logger.js — sends activity events to /api/log (Upstash Redis via serverless)
-// Fire-and-forget: never blocks the UI, silently fails if offline
+// Logs errors to console so we can debug in browser DevTools
 
 async function log(type, payload) {
   try {
-    await fetch("/api/log", {
+    const res = await fetch("/api/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, payload }),
     });
-  } catch {
-    // Silent fail — logging should never break the app
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn(`[logger] ${type} failed ${res.status}:`, data.error || data);
+    }
+  } catch (err) {
+    console.warn(`[logger] ${type} network error:`, err.message);
   }
 }
 
@@ -33,7 +37,7 @@ export const logger = {
       chapterId: chapter.id,
       chapterTitle: chapter.title,
       subject,
-      userMessage: userMessage.slice(0, 500), // cap at 500 chars
+      userMessage: userMessage.slice(0, 500),
       aiReply: aiReply.slice(0, 500),
     }),
 
@@ -52,7 +56,6 @@ export const logger = {
       score,
       passed,
       attempts: attemptNumber,
-      // Store each Q&A for admin review
       answers: questions.map((q, i) => ({
         question: q.question,
         correct: q.correct,

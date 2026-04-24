@@ -221,7 +221,7 @@ export default function AdminApp({ onLogout }) {
           )}
 
           {view === "logs" && (
-            <LogsView cronSecret={CONFIG.adminPasswordB64} />
+            <LogsView />
           )}
 
           {view === "detail" && (
