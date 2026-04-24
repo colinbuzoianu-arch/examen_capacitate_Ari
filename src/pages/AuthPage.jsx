@@ -55,7 +55,7 @@ export default function AuthPage() {
           {mode === "register" && (
             <div style={S.field}>
               <label style={S.label}>Numele tău</label>
-              <input style={S.input} type="text" placeholder="ex: Ari Buzoianu"
+              <input style={S.input} type="text" placeholder="ex: Popescu Ion"
                 value={name} onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSubmit()} />
             </div>

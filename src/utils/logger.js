@@ -1,12 +1,15 @@
 // logger.js — sends activity events to /api/log (Upstash Redis via serverless)
 // Logs errors to console so we can debug in browser DevTools
 
+let _userName = "";
+export function setLoggerUser(name) { _userName = name; }
+
 async function log(type, payload) {
   try {
     const res = await fetch("/api/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, payload }),
+      body: JSON.stringify({ type, payload: { ...payload, userName: _userName } }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));

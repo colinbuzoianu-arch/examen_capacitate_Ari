@@ -54,12 +54,12 @@ export default function AdminApp({ onLogout }) {
     const done = chs.filter(c => unlockedChapters[c.id]).length;
     const pct = chs.length ? Math.round((done / chs.length) * 100) : 0;
     const res = await sendEmail({
-      to: [CONFIG.studentEmail, CONFIG.parentEmail, CONFIG.motherEmail],
+      to: [manualTarget || ""],
       subject: `📚 Reminder studiu – ${curWeek.label} · EN 2026`,
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
 <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 8px;">📚 Reminder – ${curWeek.label}</h1>
-<p style="font-size:13px;color:#666;line-height:1.6;">Hai Ari! ${done}/${chs.length} capitole bifate (${pct}%). Nu uita: quiz 8/10 + screenshot pentru fiecare capitol! 💪</p>
+<p style="font-size:13px;color:#666;line-height:1.6;">Salut! ${done}/${chs.length} capitole bifate (${pct}%). Nu uita: quiz 8/10 + screenshot pentru fiecare capitol! 💪</p>
 <a href="${window.location.origin}" style="display:inline-block;margin-top:16px;background:#1A1A1A;color:#fff;padding:11px 22px;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px;">Deschide planul →</a>
 </div></div>`,
     });
@@ -71,8 +71,8 @@ export default function AdminApp({ onLogout }) {
     if (!manualMsg.trim()) return;
     setSending(true);
     const res = await sendEmail({
-      to: [CONFIG.studentEmail, CONFIG.parentEmail, CONFIG.motherEmail],
-      subject: "✉️ Mesaj de la Tata – EN 2026",
+      to: [manualTarget || ""],
+      subject: "✉️ Mesaj de la administrator – EN 2026",
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
 <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 16px;">✉️ Mesaj de la Tata</h1>
@@ -94,7 +94,7 @@ export default function AdminApp({ onLogout }) {
       <header style={S.header}>
         <div>
           <div style={S.logo}>Panou Tata 👨‍💼</div>
-          <div style={S.logoSub}>Progresul lui {CONFIG.studentName} · EN 2026</div>
+          <div style={S.logoSub}>Panou administrare · EN 2026</div>
         </div>
         <button style={S.logoutBtn} onClick={onLogout}>← Ieșire</button>
       </header>
@@ -172,7 +172,7 @@ export default function AdminApp({ onLogout }) {
 
           {view === "screenshots" && (
             <>
-              <div style={S.cardTitle}>Dovezile lui {CONFIG.studentName}</div>
+              <div style={S.cardTitle}>Dovezi încărcate</div>
               <div style={{ marginTop: 12 }}>
                 {allScreenshots.length === 0
                   ? <p style={{ color: "#999", fontStyle: "italic", fontSize: 13 }}>Nicio dovadă încă.</p>
@@ -205,21 +205,24 @@ export default function AdminApp({ onLogout }) {
                 <p style={{ fontSize: 12, color: "#777", margin: "8px 0 14px", lineHeight: 1.6 }}>
                   Trimite un email cu progresul săptămânii curente. Include bara de progres și link la aplicație.
                 </p>
-                <div style={{ fontSize: 11, color: "#777", marginBottom: 12 }}>Către: {CONFIG.studentEmail}, {CONFIG.parentEmail}, {CONFIG.motherEmail}</div>
+                <div style={{ fontSize: 11, color: "#777", marginBottom: 12 }}>Către: {manualTarget || "(niciun destinatar selectat)"}</div>
                 <button style={{ ...S.btnDark, opacity: sending ? 0.5 : 1 }} onClick={sendReminder} disabled={sending}>
                   {sending ? "Se trimite..." : "📨 Trimite reminder acum"}
                 </button>
               </div>
 
               <div style={S.card}>
-                <div style={S.cardTitle}>✉️ Mesaj personal de la Tata</div>
+                <div style={S.cardTitle}>✉️ Trimite mesaj unui elev</div>
                 <p style={{ fontSize: 12, color: "#777", margin: "8px 0 12px", lineHeight: 1.6 }}>
-                  Scrie un mesaj personalizat pentru Ari.
+                  Scrie un mesaj și trimite-l la emailul unui elev.
                 </p>
+                <input type="email" placeholder="Email destinatar..." value={manualTarget}
+                  onChange={e => setManualTarget(e.target.value)}
+                  style={{ width: "100%", background: "#F8F6F2", border: "1px solid #E0DBD0", borderRadius: 10, padding: "9px 12px", fontSize: 12, marginBottom: 10, fontFamily: "'Inter',sans-serif", outline: "none" }} />
                 <textarea value={manualMsg} onChange={e => setManualMsg(e.target.value)}
-                  placeholder="Ex: Ari, am văzut că ai bifat primul capitol! Continuă așa! 💪"
+                  placeholder="Ex: Bună treabă! Continuă să studiezi și bifează capitolele rămase!"
                   style={S.textarea} rows={5} />
-                <div style={{ fontSize: 11, color: "#777", margin: "6px 0 12px" }}>Către: {CONFIG.studentEmail}, {CONFIG.parentEmail}, {CONFIG.motherEmail}</div>
+                <div style={{ fontSize: 11, color: "#777", margin: "6px 0 12px" }}>Către: {manualTarget || "(niciun destinatar selectat)"}</div>
                 <button style={{ ...S.btnDark, opacity: (manualMsg.trim() && !sending) ? 1 : 0.4 }}
                   onClick={sendManualMessage} disabled={!manualMsg.trim() || sending}>
                   {sending ? "Se trimite..." : "📨 Trimite mesajul"}

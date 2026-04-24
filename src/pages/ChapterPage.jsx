@@ -4,11 +4,13 @@ import { ls } from "../utils/storage.js";
 import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import { recordContentRead, recordChatMessage, recordQuizAttempt, recordScreenshot } from "../utils/gamification.js";
 
 // ── CHAPTER PAGE ─────────────────────────────────────────────────────────────
 // Tab flow: Conținut → Chat → Quiz → Screenshot → (unlocks chapter)
 export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlock }) {
+  const { user } = useAuth();
   const sub     = SUBJECTS[subject];
   const chapter = sub.chapters.find(c => c.id === chapterId);
   const storageKey = userId ? `chapter_${chapterId}` : `chapter_${chapterId}`;
@@ -101,7 +103,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     setChatInput("");
     setLoadingChat(true);
     try {
-      const reply = await chatWithTutor(chapter, newHistory, msg);
+      const reply = await chatWithTutor(chapter, newHistory, msg, user?.name?.split(" ")[0] || "elev");
       const fullHistory = [...newHistory, { role: "assistant", content: reply }];
       setChatHistory(fullHistory);
       persist({ chatHistory: fullHistory });
@@ -146,7 +148,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     }
     setEvaluating(true);
     try {
-      const result = await evaluateQuiz(chapter, quiz.questions, answers);
+      const result = await evaluateQuiz(chapter, quiz.questions, answers, user?.name?.split(" ")[0] || "tu");
       setQuizResult(result);
       persist({ quizResult: result });
       const attemptNum = (saved.quizAttempts || 0) + 1;
@@ -268,7 +270,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                 <div style={S.chatWelcome}>
                   <div style={{ fontSize: 32 }}>🤖</div>
                   <p style={{ color: "#444", fontSize: 13 }}>
-                    Bună Ari! Sunt tutorele tău pentru <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
+                    Bună{user?.name ? ` ${user.name.split(" ")[0]}` : ""}! Sunt tutorele tău pentru <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
                     <br />Întreabă-mă orice despre această temă!
                   </p>
                   <div style={S.suggestions}>
@@ -452,7 +454,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                 <div style={{ fontSize: 32 }}>🏆</div>
                 <div style={{ fontWeight: 800, fontSize: 16, color: "#2E7D32", fontFamily: "'Syne',sans-serif" }}>Capitol bifat cu succes!</div>
                 <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
-                  Quiz trecut + dovada încărcată. Felicitări Ari! 💪
+                  Quiz trecut + dovada încărcată. Felicitări!
                 </div>
               </div>
             ) : (

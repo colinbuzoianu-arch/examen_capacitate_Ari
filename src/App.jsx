@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { CONFIG } from "./constants.js";
 import { setAuthToken } from "./utils/cloudStorage.js";
+import { setLoggerUser } from "./utils/logger.js";
 import AuthPage from "./pages/AuthPage.jsx";
 import StudentApp from "./pages/StudentApp.jsx";
 import AdminApp from "./pages/AdminApp.jsx";
@@ -14,8 +15,9 @@ function AppInner() {
   const [pwErr, setPwErr] = useState(false);
   const [mode, setMode] = useState("student");
 
-  // Sync token to cloudStorage
+  // Sync token to cloudStorage + set logger user
   useEffect(() => { setAuthToken(token); }, [token]);
+  useEffect(() => { if (user?.name) setLoggerUser(user.name); }, [user]);
 
   // Check admin session
   useEffect(() => {

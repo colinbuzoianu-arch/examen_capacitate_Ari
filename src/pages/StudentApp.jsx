@@ -19,8 +19,8 @@ function getQuip(done, total) {
   if (done === Math.floor(total / 2)) return "Jumătate gata! Știi ce înseamnă asta? Că e mai ușor de-acum. 🔥";
   if (done <= total - 3)  return "Ești în top la disciplina 'bifat'. Dacă poți asta, poți și examenul! 🚀";
   if (done === total - 2)  return "Aproape! Ultimele capitole sunt ca ultimele 5 min dintr-un film. 🎬";
-  if (done === total - 1)  return "Un singur capitol! Ari, ești un monstru. Serios. 👑";
-  return "PERFECT! 15/15. Examenul e deja în buzunar. Mult succes! 🏆";
+  if (done === total - 1)  return "Un singur capitol rămas! Ești un monstru. Serios. 👑";
+  return "PERFECT! 15/15 capitole bifate. Examenul e deja în buzunar. 🏆";
 }
 
 export default function StudentApp() {
@@ -58,15 +58,15 @@ export default function StudentApp() {
     const gState = getGamState();
     setGamState(gState);
     cloudSet("gamification", gStateNew);
-    showToast("🎉 Capitol bifat! Bravo Ari!");
+    showToast(`🎉 Capitol bifat! Bravo ${user?.name?.split(" ")[0] || "tu"}!`);
     const ch = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(c => c.id === chapterId);
     const chapData = ls.get(`chapter_${chapterId}`) || {};
     const gStateNew = getGamState();
     sendEmail({
-      to: [CONFIG.parentEmail, CONFIG.motherEmail],
-      subject: `🏆 Ari a bifat: ${ch?.title}`,
+      to: [user?.email],  // notify the student themselves
+      subject: `🏆 ${user?.name} a bifat: ${ch?.title}`,
       html: chapterUnlockEmailHtml({
-        studentName: CONFIG.studentName,
+        studentName: user?.name || "Elev",
         chapterTitle: ch?.title || chapterId,
         subject: [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(x => x.id === chapterId)?.subject || "romana",
         score: chapData.quizResult?.score || 0,
@@ -126,8 +126,8 @@ function Header({ gamState, onXpClick }) {
       {/* Logo row */}
       <div style={S.headerTop}>
         <div>
-          <div style={S.logo}>EN<span style={{ color: "#C8A84B" }}>'26</span> · Ari</div>
-          <div style={S.logoSub}>Evaluarea Națională · Babel Timișoara</div>
+          <div style={S.logo}>EN<span style={{ color: "#C8A84B" }}>'26</span></div>
+          <div style={S.logoSub}>Evaluarea Națională 2026</div>
         </div>
         {/* XP chip — right side of logo row */}
         <button onClick={onXpClick} style={S.xpChip}>
@@ -193,7 +193,7 @@ function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedC
         <div style={S.heroTop}>
           <Ring pct={pct} size={124} />
           <div style={S.heroInfo}>
-            <div style={S.heroGreet}>Bună, Ari! 👋</div>
+            <div style={S.heroGreet}>Bună, {user?.name?.split(" ")[0] || ""}! 👋</div>
             <div style={S.heroQuip}>{quip}</div>
             <div style={S.heroStats}>{doneAll()} din {totalAll()} capitole bifate</div>
           </div>

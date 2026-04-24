@@ -150,7 +150,7 @@ export default function LogsView() {
                               <div style={S.answerQ}>{qi + 1}. {a.question}</div>
                               <div style={S.answerA}>
                                 <span style={{ color: a.isCorrect ? "#52A852" : "#E8654A" }}>
-                                  {a.isCorrect ? "✓" : "✗"} Ari: <strong>{a.given || "—"}</strong>
+                                  {a.isCorrect ? "✓" : "✗"} Răspuns: <strong>{a.given || "—"}</strong>
                                 </span>
                                 {!a.isCorrect && (
                                   <span style={{ color: "#52A852", marginLeft: 8 }}>Corect: <strong>{a.correct}</strong></span>
@@ -170,7 +170,7 @@ export default function LogsView() {
                   {log.type === "chat_message" && (
                     <div style={{ marginTop: 6 }}>
                       <div style={S.chatPreview}>
-                        <span style={{ color: "#9C6FE4", fontWeight: 600 }}>Ari:</span> {log.userMessage}
+                        <span style={{ color: "#9C6FE4", fontWeight: 600 }}>{log.userName || "Elev"}:</span> {log.userMessage}
                       </div>
                       <button style={S.expandBtn} onClick={() => setExpanded(e => ({ ...e, [i]: !isExp }))}>
                         {isExp ? "▲ Ascunde răspuns" : "▼ Vezi răspunsul AI"}
@@ -241,7 +241,7 @@ export default function LogsView() {
                       : st.answers.filter(a => !a.isCorrect).map((a, i) => (
                         <div key={i} style={S.wrongAns}>
                           <div style={{ fontSize: 11, color: "#555" }}>{a.question}</div>
-                          <div style={{ fontSize: 10, color: "#E8654A" }}>Ari: {a.given} → Corect: {a.correct}</div>
+                          <div style={{ fontSize: 10, color: "#E8654A" }}>Răspuns dat: {a.given} → Corect: {a.correct}</div>
                           {a.explanation && <div style={{ fontSize: 10, color: "#888", fontStyle: "italic" }}>💡 {a.explanation}</div>}
                         </div>
                       ))
@@ -270,7 +270,7 @@ export default function LogsView() {
                   <span style={S.logTime}>{fmtTime(log.ts)}</span>
                 </div>
                 <div style={S.chatBubbleUser}>
-                  <span style={{ fontSize: 10, color: "#9C6FE4", fontWeight: 700, display: "block", marginBottom: 3 }}>Ari a întrebat:</span>
+                  <span style={{ fontSize: 10, color: "#9C6FE4", fontWeight: 700, display: "block", marginBottom: 3 }}>{log.userName || "Elev"} a întrebat:</span>
                   {log.userMessage}
                 </div>
                 <div style={S.chatBubbleAI}>
