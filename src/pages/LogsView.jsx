@@ -192,15 +192,36 @@ export default function LogsView({ cronSecret }) {
                 <div style={S.statTop}>
                   <div>
                     <div style={S.statTitle}>{st.chapterTitle}</div>
-                    <div style={{ fontSize: 10, color: st.subject === "romana" ? "#FF8A65" : "#64B5F6", fontWeight: 600, marginTop: 2 }}>
+                    <div style={{ fontSize: 10, color: st.subject === "romana" ? "#C8392B" : "#1A5276", fontWeight: 600, marginTop: 2 }}>
                       {st.subject === "romana" ? "Română" : "Matematică"}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ ...S.scoreBig, color: st.passed ? "#52A852" : "#E8654A" }}>{st.score}/10</div>
-                    <div style={{ fontSize: 10, color: "#AAA" }}>{st.attempts} {st.attempts === 1 ? "încercare" : "încercări"}</div>
+                    <div style={{ ...S.scoreBig, color: st.passed ? "#2E7D32" : "#C62828" }}>{st.score}/10</div>
+                    {st.bestScore !== undefined && st.bestScore !== st.score && (
+                      <div style={{ fontSize: 10, color: "#C8A84B", fontWeight: 600 }}>Best: {st.bestScore}/10</div>
+                    )}
+                    <div style={{ fontSize: 10, color: "#AAA" }}>{st.totalAttempts || st.attempts || 1} {(st.totalAttempts || 1) === 1 ? "încercare" : "încercări"}</div>
                   </div>
                 </div>
+                {/* Attempt history */}
+                {st.attempts_history && st.attempts_history.length > 1 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, color: "#AAA", marginBottom: 5 }}>Istoricul încercărilor:</div>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                      {st.attempts_history.map((a, i) => (
+                        <div key={i} style={{
+                          fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8,
+                          background: a.passed ? "#E8F5E9" : "#FFF0EE",
+                          color: a.passed ? "#2E7D32" : "#C62828",
+                          border: `1px solid ${a.passed ? "#A5D6A7" : "#FFCDD2"}`,
+                        }}>
+                          #{i+1} {a.score}/10 {a.passed ? "✅" : "❌"}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div style={S.statBarBg}>
                   <div style={{ ...S.statBarFill, width: `${st.score * 10}%`, background: st.passed ? "#52A852" : "#E8654A" }} />
                 </div>

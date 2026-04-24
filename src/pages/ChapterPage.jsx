@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ls } from "../utils/storage.js";
 import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
@@ -223,13 +223,10 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
         {tab === "content" && (
           <div>
             {loadingContent ? (
-              <div style={S.loading}>
-                <Spinner />
-                <div>
-                  <div style={{ fontSize: 13, color: "#555" }}>Claude generează lecția pentru tine...</div>
-                  <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>Prima generare durează ~15 secunde. Se salvează local după aceea.</div>
-                </div>
-              </div>
+              <AnimatedLoading
+                messages={CONTENT_MESSAGES}
+                subtitle="Prima generare durează ~15 sec. Se salvează local, nu mai plătești a doua oară."
+              />
 ) : content ? (
               <div style={S.mdContent} dangerouslySetInnerHTML={{ __html: renderMd(content) }} />
             ) : (
@@ -319,13 +316,10 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
             )}
 
             {loadingQuiz && (
-              <div style={S.loading}>
-                <Spinner />
-                <div>
-                  <div style={{ fontSize: 13, color: "#555" }}>Claude generează întrebările...</div>
-                  <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>Poate dura 10-20 secunde. Se reîncearcă automat dacă e nevoie.</div>
-                </div>
-              </div>
+              <AnimatedLoading
+                messages={QUIZ_MESSAGES}
+                subtitle="Se reîncearcă automat dacă e nevoie. Ai răbdare! 🧠"
+              />
             )}
 
             {quiz && !loadingQuiz && (
@@ -389,7 +383,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                     style={{ ...S.btnY, opacity: (Object.keys(answers).length === quiz.questions.length && !evaluating) ? 1 : 0.4 }}
                     onClick={submitQuiz}
                     disabled={Object.keys(answers).length < quiz.questions.length || evaluating}>
-                    {evaluating ? "Claude evaluează..." : `✅ Trimite răspunsurile (${Object.keys(answers).length}/10)`}
+                    {evaluating ? "⏳ Claude corectează..." : `✅ Trimite răspunsurile (${Object.keys(answers).length}/10)`}
                   </button>
                 )}
               </div>
@@ -472,7 +466,45 @@ function renderMd(text) {
 }
 
 function Spinner() {
-  return <div style={{ width: 20, height: 20, border: "2px solid #E0DBD0", borderTop: "2px solid #C8A84B", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />;
+  return <div style={{ width: 22, height: 22, border: "2px solid #E0DBD0", borderTop: "2px solid #C8A84B", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />;
+}
+
+const CONTENT_MESSAGES = [
+  "Claude citește programa de clasa a VIII-a...",
+  "Se pregătesc explicații pentru tine...",
+  "Se caută cele mai bune exemple...",
+  "Se construiesc exercițiile rezolvate...",
+  "Aproape gata! Se finisează lecția...",
+];
+
+const QUIZ_MESSAGES = [
+  "Claude inventează întrebări dificile... 😈",
+  "Se calibrează dificultatea pentru tine...",
+  "Se verifică întrebările cu programa EN...",
+  "Se pregătesc capcanele... 🪤",
+  "Ultimele retușuri la quiz...",
+];
+
+function AnimatedLoading({ messages, subtitle }) {
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setIdx(i => (i + 1) % messages.length), 2200);
+    return () => clearInterval(t);
+  }, [messages]);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", gap: 16 }}>
+      <div style={{ position: "relative", width: 56, height: 56 }}>
+        <div style={{ position: "absolute", inset: 0, border: "3px solid #F0EDE6", borderTop: "3px solid #C8A84B", borderRadius: "50%", animation: "spin 0.9s linear infinite" }} />
+        <div style={{ position: "absolute", inset: 8, border: "2px solid #F0EDE6", borderBottom: "2px solid #1A5276", borderRadius: "50%", animation: "spin 1.4s linear infinite reverse" }} />
+      </div>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 14, color: "#333", fontWeight: 500, fontFamily: "'Inter',sans-serif", minHeight: 20, transition: "opacity .3s" }}>
+          {messages[idx]}
+        </div>
+        {subtitle && <div style={{ fontSize: 11, color: "#AAA", marginTop: 6, fontFamily: "'Inter',sans-serif" }}>{subtitle}</div>}
+      </div>
+    </div>
+  );
 }
 
 // ── STYLES ────────────────────────────────────────────────────────────────────
