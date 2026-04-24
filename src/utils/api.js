@@ -1,11 +1,11 @@
 // All AI calls go through /api/claude (serverless, keeps API key secret)
 
-// ── Core call with retry ──────────────────────────────────────────────────────
-async function aiCallOnce(messages, system = "", max_tokens = 2000) {
+// ── Core call ────────────────────────────────────────────────────────────────
+async function aiCallOnce(messages, system = "", max_tokens = 2000, fast = false) {
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, system, max_tokens }),
+    body: JSON.stringify({ messages, system, max_tokens, fast }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -17,12 +17,17 @@ async function aiCallOnce(messages, system = "", max_tokens = 2000) {
   return text;
 }
 
+// Fast call — uses Haiku model, much faster for structured tasks like quiz
+export async function aiCallFast(messages, system = "", max_tokens = 1800) {
+  return aiCallOnce(messages, system, max_tokens, true);
+}
+
 // Retry wrapper — tries up to `attempts` times with exponential backoff
 export async function aiCall(messages, system = "", max_tokens = 2000, attempts = 3) {
   let lastError;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await aiCallOnce(messages, system, max_tokens);
+      return await aiCallOnce(messages, system, max_tokens, false);
     } catch (err) {
       lastError = err;
       console.warn(`aiCall attempt ${i + 1} failed:`, err.message);
@@ -95,65 +100,42 @@ Fii concis dar complet. Maxim 600 cuvinte.`;
 }
 
 // ── Generate quiz ─────────────────────────────────────────────────────────────
+// Uses claude-haiku for speed (fits in Vercel 10s free tier limit)
 export async function generateQuiz(chapter) {
-  const system = `Ești un examinator pentru Evaluarea Națională clasa a VIII-a România.
-Generează EXCLUSIV JSON valid, fără text înainte sau după. Fără markdown, fără backticks.
-Răspunde NUMAI cu obiectul JSON cerut, nimic altceva.`;
+  const system = `EN VIII examinator. Răspunde DOAR cu JSON valid, fără text extra.`;
 
-  const prompt = `Generează un quiz de 10 întrebări pentru capitolul "${chapter.title}".
-Context: ${chapter.aiContext}
+  // Compact prompt — fewer tokens = faster response
+  const prompt = `Quiz 10 întrebări pentru "${chapter.title}" (EN VIII România).
+Teme: ${chapter.topics ? chapter.topics.join(", ") : chapter.aiContext.slice(0, 200)}
 
-Returnează DOAR acest JSON (absolut nimic altceva, niciun text, niciun comentariu):
-{
-  "questions": [
-    {
-      "id": 1,
-      "question": "textul întrebării",
-      "options": ["A) varianta1", "B) varianta2", "C) varianta3", "D) varianta4"],
-      "correct": "A",
-      "explanation": "De ce A este corect"
-    }
-  ]
-}
+JSON STRICT (nimic altceva):
+{"questions":[{"id":1,"question":"...","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","explanation":"..."}]}
 
-Reguli stricte:
-- Exact 10 întrebări cu câte 4 variante (A/B/C/D)
-- Dificultate graduată: 3 ușoare, 4 medii, 3 grele
-- Toate întrebările în română
-- Relevante pentru programa EN VIII
-- "correct" este litera singură: "A", "B", "C" sau "D"
-- NU adăuga text înainte sau după JSON`;
+Reguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație scurtă max 15 cuvinte.`;
 
-  // Quiz needs more tokens and more retries — JSON parsing is strict
-  for (let attempt = 1; attempt <= 4; attempt++) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const raw = await aiCall([{ role: "user", content: prompt }], system, 3000, 1);
+      const raw = await aiCallFast([{ role: "user", content: prompt }], system, 1800);
       const parsed = extractJSON(raw);
 
-      // Validate structure
-      if (!parsed.questions || !Array.isArray(parsed.questions)) {
-        throw new Error("Invalid quiz structure: missing questions array");
-      }
-      if (parsed.questions.length < 5) {
-        throw new Error(`Too few questions: ${parsed.questions.length}`);
+      if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length < 5) {
+        throw new Error("Structură invalidă");
       }
 
-      // Sanitize — ensure all required fields exist
-      parsed.questions = parsed.questions.map((q, i) => ({
-        id: q.id || i + 1,
+      parsed.questions = parsed.questions.slice(0, 10).map((q, i) => ({
+        id: i + 1,
         question: q.question || `Întrebarea ${i + 1}`,
         options: Array.isArray(q.options) && q.options.length === 4
-          ? q.options
-          : ["A) -", "B) -", "C) -", "D) -"],
+          ? q.options : ["A) -", "B) -", "C) -", "D) -"],
         correct: ["A","B","C","D"].includes(q.correct) ? q.correct : "A",
         explanation: q.explanation || "",
       }));
 
       return parsed;
     } catch (err) {
-      console.warn(`Quiz attempt ${attempt}/4 failed:`, err.message);
-      if (attempt === 4) throw new Error(`Nu s-a putut genera quiz-ul după 4 încercări. Încearcă din nou.`);
-      await new Promise(r => setTimeout(r, 1500 * attempt));
+      console.warn(`Quiz attempt ${attempt}/2:`, err.message);
+      if (attempt === 2) throw new Error("Nu s-a putut genera quiz-ul. Încearcă din nou.");
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 }

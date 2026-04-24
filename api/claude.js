@@ -1,9 +1,6 @@
 // api/claude.js — Vercel Serverless Function
-// Proxies requests to Anthropic API, keeping the key server-side
-
-export const config = {
-  maxDuration: 30, // extend Vercel timeout to 30s for quiz/content generation
-};
+// Proxies to Anthropic API
+// Uses claude-haiku for fast/structured tasks (quiz), sonnet for content
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -11,12 +8,18 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
 
-  const { messages, system, max_tokens } = req.body;
+  const { messages, system, max_tokens, fast } = req.body;
   if (!messages?.length) return res.status(400).json({ error: "Missing messages" });
+
+  // Haiku for quiz (fast, cheap, fits in 10s)
+  // Sonnet for lessons and chat (better quality)
+  const model = fast
+    ? "claude-haiku-4-5-20251001"
+    : "claude-sonnet-4-5";
 
   try {
     const body = {
-      model: "claude-sonnet-4-5",
+      model,
       max_tokens: max_tokens || 2000,
       messages,
     };
