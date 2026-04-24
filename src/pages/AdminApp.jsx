@@ -39,7 +39,7 @@ export default function AdminApp({ onLogout }) {
     const done = chs.filter(c => unlockedChapters[c.id]).length;
     const pct = chs.length ? Math.round((done / chs.length) * 100) : 0;
     const res = await sendEmail({
-      to: CONFIG.studentEmail,
+      to: [CONFIG.studentEmail, CONFIG.motherEmail],
       subject: `📚 Reminder studiu – ${curWeek.label} · EN 2026`,
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
@@ -56,7 +56,7 @@ export default function AdminApp({ onLogout }) {
     if (!manualMsg.trim()) return;
     setSending(true);
     const res = await sendEmail({
-      to: CONFIG.studentEmail,
+      to: [CONFIG.studentEmail, CONFIG.motherEmail],
       subject: "✉️ Mesaj de la Tata – EN 2026",
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
@@ -123,7 +123,7 @@ export default function AdminApp({ onLogout }) {
                     <div style={S.bigBarBg}>
                       <div style={{ ...S.bigBarFill, width: `${pct}%`, background: accent }} />
                     </div>
-                    <div style={{ fontSize: 11, color: "#AAA" }}>{done}/{total} capitole bifate</div>
+                    <div style={{ fontSize: 11, color: "#999" }}>{done}/{total} capitole bifate</div>
                   </div>
                 );
               })}
@@ -138,13 +138,13 @@ export default function AdminApp({ onLogout }) {
                       <div key={w.id} style={{ ...S.wkRow, borderLeftColor: st === "current" ? "#C8A84B" : st === "past" ? "#52A852" : "#E0DBD0" }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#333", fontFamily: "'Inter',sans-serif" }}>{w.label} · {fmt(w.start)}</div>
-                          <div style={{ fontSize: 10, color: "#AAA" }}>{done}/{chs.length} bifate</div>
+                          <div style={{ fontSize: 10, color: "#999" }}>{done}/{chs.length} bifate</div>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div style={{ width: 72, height: 5, background: "#EAE6DF", borderRadius: 3, overflow: "hidden" }}>
                             <div style={{ width: `${pct}%`, height: "100%", background: pct === 100 ? "#52A852" : "#C8A84B", borderRadius: 3 }} />
                           </div>
-                          <span style={{ fontSize: 11, color: "#AAA", minWidth: 28, fontFamily: "'Inter',sans-serif" }}>{pct}%</span>
+                          <span style={{ fontSize: 11, color: "#999", minWidth: 28, fontFamily: "'Inter',sans-serif" }}>{pct}%</span>
                         </div>
                       </div>
                     );
@@ -159,14 +159,14 @@ export default function AdminApp({ onLogout }) {
               <div style={S.cardTitle}>Dovezile lui {CONFIG.studentName}</div>
               <div style={{ marginTop: 12 }}>
                 {allScreenshots.length === 0
-                  ? <p style={{ color: "#AAA", fontStyle: "italic", fontSize: 13 }}>Nicio dovadă încă.</p>
+                  ? <p style={{ color: "#999", fontStyle: "italic", fontSize: 13 }}>Nicio dovadă încă.</p>
                   : <div style={S.cpGrid}>
                       {allScreenshots.map((ch, i) => (
                         <div key={i} style={S.cpCard} onClick={() => setSelectedImg(ch.screenshot)}>
                           <img src={ch.screenshot} alt="" style={S.cpImg} />
                           <div style={{ padding: "8px 10px" }}>
                             <div style={{ fontSize: 11, fontWeight: 700, color: ch.subject === "romana" ? "#FF8A65" : "#64B5F6", fontFamily: "'Syne',sans-serif" }}>{ch.title}</div>
-                            <div style={{ fontSize: 10, color: "#AAA", marginTop: 2 }}>Quiz: {ch.quizResult?.score || "—"}/10 {ch.quizResult?.passed ? "✅" : "❌"}</div>
+                            <div style={{ fontSize: 10, color: "#999", marginTop: 2 }}>Quiz: {ch.quizResult?.score || "—"}/10 {ch.quizResult?.passed ? "✅" : "❌"}</div>
                           </div>
                         </div>
                       ))}
@@ -176,7 +176,7 @@ export default function AdminApp({ onLogout }) {
               {selectedImg && (
                 <div style={S.lightbox} onClick={() => setSelectedImg(null)}>
                   <img src={selectedImg} alt="" style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: 16 }} />
-                  <div style={{ color: "#fff", fontSize: 12, marginTop: 12, opacity: 0.6 }}>Apasă oriunde pentru a închide</div>
+                  <div style={{ color: "#1A1A1A", fontSize: 12, marginTop: 12, opacity: 0.6 }}>Apasă oriunde pentru a închide</div>
                 </div>
               )}
             </>
@@ -186,10 +186,10 @@ export default function AdminApp({ onLogout }) {
             <>
               <div style={S.card}>
                 <div style={S.cardTitle}>🤖 Reminder automat</div>
-                <p style={{ fontSize: 12, color: "#888", margin: "8px 0 14px", lineHeight: 1.6 }}>
+                <p style={{ fontSize: 12, color: "#777", margin: "8px 0 14px", lineHeight: 1.6 }}>
                   Trimite un email cu progresul săptămânii curente. Include bara de progres și link la aplicație.
                 </p>
-                <div style={{ fontSize: 11, color: "#AAA", marginBottom: 12 }}>Către: {CONFIG.studentEmail}</div>
+                <div style={{ fontSize: 11, color: "#999", marginBottom: 12 }}>Către: {CONFIG.studentEmail}</div>
                 <button style={{ ...S.btnDark, opacity: sending ? 0.5 : 1 }} onClick={sendReminder} disabled={sending}>
                   {sending ? "Se trimite..." : "📨 Trimite reminder acum"}
                 </button>
@@ -197,13 +197,13 @@ export default function AdminApp({ onLogout }) {
 
               <div style={S.card}>
                 <div style={S.cardTitle}>✉️ Mesaj personal de la Tata</div>
-                <p style={{ fontSize: 12, color: "#888", margin: "8px 0 12px", lineHeight: 1.6 }}>
+                <p style={{ fontSize: 12, color: "#777", margin: "8px 0 12px", lineHeight: 1.6 }}>
                   Scrie un mesaj personalizat pentru Ari.
                 </p>
                 <textarea value={manualMsg} onChange={e => setManualMsg(e.target.value)}
                   placeholder="Ex: Ari, am văzut că ai bifat primul capitol! Continuă așa! 💪"
                   style={S.textarea} rows={5} />
-                <div style={{ fontSize: 11, color: "#AAA", margin: "6px 0 12px" }}>Către: {CONFIG.studentEmail}</div>
+                <div style={{ fontSize: 11, color: "#999", margin: "6px 0 12px" }}>Către: {CONFIG.studentEmail}</div>
                 <button style={{ ...S.btnDark, opacity: (manualMsg.trim() && !sending) ? 1 : 0.4 }}
                   onClick={sendManualMessage} disabled={!manualMsg.trim() || sending}>
                   {sending ? "Se trimite..." : "📨 Trimite mesajul"}
@@ -212,7 +212,7 @@ export default function AdminApp({ onLogout }) {
 
               <div style={{ ...S.card, background: "#F0FAF0", borderColor: "#C8E6C9" }}>
                 <div style={{ fontSize: 12, color: "#52A852", fontWeight: 700, marginBottom: 4, fontFamily: "'Syne',sans-serif" }}>⏰ Cron automat vineri 18:00</div>
-                <p style={{ fontSize: 12, color: "#888", lineHeight: 1.6, margin: 0 }}>
+                <p style={{ fontSize: 12, color: "#777", lineHeight: 1.6, margin: 0 }}>
                   Vercel trimite automat un reminder în fiecare vineri. Necesită <code style={{ background: "#E8E4DC", padding: "1px 5px", borderRadius: 4 }}>RESEND_API_KEY</code> și <code style={{ background: "#E8E4DC", padding: "1px 5px", borderRadius: 4 }}>CRON_SECRET</code> în Vercel Dashboard.
                 </p>
               </div>
@@ -241,7 +241,7 @@ export default function AdminApp({ onLogout }) {
                             <div style={{ width: 8, height: 8, borderRadius: "50%", background: isDone ? "#52A852" : "#E0DBD0", flexShrink: 0, marginTop: 4 }} />
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 12, fontWeight: 600, color: isDone ? "#52A852" : "#333", fontFamily: "'Inter',sans-serif" }}>{ch.title}</div>
-                              <div style={{ fontSize: 10, color: "#AAA" }}>{wk?.label}</div>
+                              <div style={{ fontSize: 10, color: "#999" }}>{wk?.label}</div>
                             </div>
                             <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
                               {[["Lecție", !!data.content], [`Quiz ${data.quizResult?.score || "—"}/10`, data.quizResult?.passed], ["📸", !!data.screenshot]].map(([label, done]) => (
@@ -269,10 +269,10 @@ export default function AdminApp({ onLogout }) {
 
 function Kpi({ label, value, sub, color }) {
   return (
-    <div style={{ background: "#fff", borderRadius: 12, padding: "14px 12px", border: "1px solid #EAE6DF" }}>
+    <div style={{ background: "#fff", borderRadius: 12, padding: "14px 12px", border: "1px solid #E0DBD0" }}>
       <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: "'Syne',sans-serif" }}>{value}</div>
       <div style={{ fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2, fontFamily: "'Inter',sans-serif" }}>{label}</div>
-      <div style={{ fontSize: 10, color: "#AAA" }}>{sub}</div>
+      <div style={{ fontSize: 10, color: "#999" }}>{sub}</div>
     </div>
   );
 }
@@ -281,25 +281,25 @@ const S = {
   shell: { background: "#F0EDE6", minHeight: "100vh", fontFamily: "'Inter',sans-serif", color: "#1A1A1A", paddingBottom: 80 },
   header: { background: "#fff", borderBottom: "1px solid #E8E4DC", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" },
   logo: { fontSize: 16, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" },
-  logoSub: { fontSize: 11, color: "#AAA", marginTop: 2 },
-  logoutBtn: { background: "none", border: "1px solid #E0DBD0", color: "#888", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12 },
+  logoSub: { fontSize: 11, color: "#999", marginTop: 2 },
+  logoutBtn: { background: "none", border: "1px solid #E0DBD0", color: "#777", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12 },
   nav: { position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderTop: "1px solid #E8E4DC", display: "flex", zIndex: 100 },
-  navBtn: { flex: 1, background: "none", border: "none", color: "#BBB", padding: "9px 4px 11px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 10, fontFamily: "'Inter',sans-serif" },
+  navBtn: { flex: 1, background: "none", border: "none", color: "#AAA", padding: "9px 4px 11px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 10, fontFamily: "'Inter',sans-serif" },
   navOn: { color: "#52A852" },
   main: { padding: "14px 14px 0" },
   page: { maxWidth: 560, margin: "0 auto" },
   cardTitle: { fontSize: 13, fontWeight: 700, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" },
   kpiGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 },
-  card: { background: "#fff", borderRadius: 14, padding: 16, marginBottom: 14, border: "1px solid #EAE6DF" },
+  card: { background: "#fff", borderRadius: 14, padding: 16, marginBottom: 14, border: "1px solid #E0DBD0" },
   bigBarBg: { height: 8, background: "#EAE6DF", borderRadius: 4, overflow: "hidden", marginBottom: 8 },
   bigBarFill: { height: "100%", borderRadius: 4, transition: "width .8s ease" },
   wkRow: { display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 8, marginBottom: 4, background: "#F8F6F2", borderLeft: "3px solid" },
   cpGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px,1fr))", gap: 10 },
-  cpCard: { background: "#fff", borderRadius: 12, overflow: "hidden", cursor: "pointer", border: "1px solid #EAE6DF" },
+  cpCard: { background: "#fff", borderRadius: 12, overflow: "hidden", cursor: "pointer", border: "1px solid #E0DBD0" },
   cpImg: { width: "100%", height: 110, objectFit: "cover" },
   lightbox: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 500, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "zoom-out" },
   textarea: { width: "100%", background: "#F8F6F2", color: "#1A1A1A", border: "1px solid #E0DBD0", borderRadius: 10, padding: "10px 12px", fontSize: 12, resize: "vertical", fontFamily: "'Inter',sans-serif", outline: "none" },
-  btnDark: { background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 10, padding: "11px 18px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "'Syne',sans-serif", width: "100%" },
-  detailRow: { display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderRadius: 8, marginBottom: 4, border: "1px solid #EAE6DF" },
-  toast: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#1A1A1A", color: "#fff", fontWeight: 600, padding: "10px 22px", borderRadius: 20, zIndex: 400, fontSize: 13, boxShadow: "0 4px 24px rgba(0,0,0,.15)", whiteSpace: "nowrap" },
+  btnDark: { background: "#1A1A1A", color: "#1A1A1A", border: "none", borderRadius: 10, padding: "11px 18px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "'Syne',sans-serif", width: "100%" },
+  detailRow: { display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", borderRadius: 8, marginBottom: 4, border: "1px solid #E0DBD0" },
+  toast: { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#1A1A1A", color: "#1A1A1A", fontWeight: 600, padding: "10px 22px", borderRadius: 20, zIndex: 400, fontSize: 13, boxShadow: "0 4px 24px rgba(0,0,0,.15)", whiteSpace: "nowrap" },
 };

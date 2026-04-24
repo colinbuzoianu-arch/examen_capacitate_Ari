@@ -34,7 +34,7 @@ Română: <strong style="color:#FF6B6B;">22 iunie 2026</strong> · Matematică: 
       body: JSON.stringify({
         from: "EN 2026 <onboarding@resend.dev>",
         to: ["ari.buzoianu@scoalababel.ro"],
-        cc: ["colinbuzoianu@gmail.com"],
+        cc: ["colinbuzoianu@gmail.com", "anamunteanucontact@gmail.com"],
         subject: `📚 Reminder studiu – Săptămâna ${weekNum} · EN 2026`,
         html,
       }),

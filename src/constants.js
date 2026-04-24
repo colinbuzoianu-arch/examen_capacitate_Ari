@@ -5,9 +5,10 @@ export const START_DATE  = new Date("2026-04-23");
 export const CONFIG = {
   studentEmail:    "ari.buzoianu@scoalababel.ro",
   parentEmail:     "colinbuzoianu@gmail.com",
+  motherEmail:     "anamunteanucontact@gmail.com",
   studentName:     "Ari",
   parentName:      "Colin",
-  adminPasswordB64: btoa("babel2026"),
+  adminPasswordB64: btoa("Babel2012"),
   QUIZ_PASS_SCORE: 8,   // out of 10
 };
 

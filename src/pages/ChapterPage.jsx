@@ -232,7 +232,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
               {chatHistory.length === 0 && (
                 <div style={S.chatWelcome}>
                   <div style={{ fontSize: 32 }}>🤖</div>
-                  <p style={{ color: "#888", fontSize: 13 }}>
+                  <p style={{ color: "#444", fontSize: 13 }}>
                     Bună Ari! Sunt tutorele tău pentru <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
                     <br />Întreabă-mă orice despre această temă!
                   </p>
@@ -282,7 +282,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
             {!quiz && !loadingQuiz && (
               <div style={S.emptyState}>
                 <div style={{ fontSize: 40 }}>🧠</div>
-                <p style={{ color: "#aaa", fontSize: 14 }}>
+                <p style={{ color: "#888", fontSize: 14 }}>
                   Quiz de 10 întrebări din <strong>{chapter.title}</strong>.<br />
                   Trebuie să răspunzi corect la minim <strong style={{ color: "#F1C40F" }}>8 din 10</strong> pentru a bifa capitolul.
                 </p>
@@ -305,10 +305,10 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                     <div style={{ fontSize: 22, fontWeight: 800, color: quizResult.passed ? "#6BCB77" : "#FF6B6B" }}>
                       {quizResult.score}/10
                     </div>
-                    <div style={{ fontSize: 13, color: "#555", margin: "6px 0" }}>
+                    <div style={{ fontSize: 13, color: "#444", margin: "6px 0" }}>
                       {quizResult.passed ? "Ai trecut! Acum încarcă și un screenshot." : "Nu ai trecut. Mai încearcă!"}
                     </div>
-                    <div style={{ fontSize: 12, color: "#aaa", lineHeight: 1.6, fontStyle: "italic" }}>{quizResult.feedback}</div>
+                    <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6, fontStyle: "italic" }}>{quizResult.feedback}</div>
                     {!quizResult.passed && (
                       <button style={{ ...S.btnY, width: "auto", marginTop: 12 }} onClick={resetQuiz}>🔄 Încearcă din nou</button>
                     )}
@@ -369,7 +369,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
           <div>
             <div style={S.card}>
               <div style={S.cardTitle}>📸 Dovada muncii tale</div>
-              <p style={{ fontSize: 13, color: "#888", marginBottom: 16, lineHeight: 1.6 }}>
+              <p style={{ fontSize: 13, color: "#444", marginBottom: 16, lineHeight: 1.6 }}>
                 Fă o poză sau un screenshot cu notițele, exercițiile sau manualul din care ai studiat
                 capitolul <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
                 <br /><br />
@@ -386,7 +386,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                 onClick={() => fileRef.current?.click()}>
                 {screenshot
                   ? <img src={screenshot} alt="screenshot" style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 8 }} />
-                  : <div style={{ textAlign: "center", color: "#555" }}>
+                  : <div style={{ textAlign: "center", color: "#444" }}>
                       <div style={{ fontSize: 40 }}>📷</div>
                       <div style={{ fontSize: 13 }}>Apasă pentru a alege o poză sau screenshot</div>
                     </div>
@@ -406,13 +406,13 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
               <div style={{ ...S.resultBanner, background: "#1a2e1a", borderColor: "#6BCB77" }}>
                 <div style={{ fontSize: 32 }}>🏆</div>
                 <div style={{ fontWeight: 700, fontSize: 16, color: "#6BCB77" }}>Capitol bifat cu succes!</div>
-                <div style={{ fontSize: 13, color: "#aaa", marginTop: 4 }}>
+                <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
                   Quiz trecut + dovada încărcată. Felicitări Ari! 💪
                 </div>
               </div>
             ) : (
               <div style={S.unlockChecklist}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#888", marginBottom: 10 }}>Pentru a bifa capitolul:</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 10 }}>Pentru a bifa capitolul:</div>
                 <div style={S.checkItem}><span style={{ color: quizPassed ? "#6BCB77" : "#555" }}>{quizPassed ? "✅" : "⬜"}</span> Quiz trecut (min. 8/10)</div>
                 <div style={S.checkItem}><span style={{ color: hasScreenshot ? "#6BCB77" : "#555" }}>{hasScreenshot ? "✅" : "⬜"}</span> Screenshot încărcat</div>
               </div>
@@ -444,57 +444,57 @@ function Spinner() {
 // ── STYLES ────────────────────────────────────────────────────────────────────
 const S = {
   shell: { background: "#F0EDE6", minHeight: "100vh", fontFamily: "'Inter',sans-serif", color: "#1A1A1A", display: "flex", flexDirection: "column" },
-  topBar: { background: "#fff", borderBottom: "1px solid #222", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 },
-  backBtn: { background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: 14, fontFamily: "'Inter',sans-serif", padding: "4px 8px" },
+  topBar: { background: "#fff", borderBottom: "2px solid #E0DBD0", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 },
+  backBtn: { background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: 14, fontFamily: "'Inter',sans-serif", padding: "4px 8px" },
   chapInfo: { display: "flex", alignItems: "center", gap: 8, flex: 1 },
   chapName: { fontSize: 14, fontWeight: 700, color: "#1A1A1A" },
   unlocked: { background: "#1a3a1a", color: "#6BCB77", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, border: "1px solid #2a5a2a" },
 
-  unlockBar: { background: "#161616", borderBottom: "1px solid #1e1e1e", padding: "8px 16px", display: "flex", alignItems: "center", gap: 0, justifyContent: "center" },
+  unlockBar: { background: "#F8F6F2", borderBottom: "1px solid #1e1e1e", padding: "8px 16px", display: "flex", alignItems: "center", gap: 0, justifyContent: "center" },
   unlockStep: { fontSize: 10, fontWeight: 700, color: "#1A1A1A", padding: "4px 10px", borderRadius: 20, whiteSpace: "nowrap" },
-  unlockLine: { flex: 1, maxWidth: 40, height: 1, background: "#333", margin: "0 4px" },
+  unlockLine: { flex: 1, maxWidth: 40, height: 1, background: "#D5D0C8", margin: "0 4px" },
 
-  tabNav: { display: "flex", background: "#fff", borderBottom: "1px solid #222" },
-  tabBtn: { flex: 1, background: "none", border: "none", borderBottom: "2px solid transparent", color: "#666", padding: "10px 4px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: "'Inter',sans-serif", fontSize: 16 },
+  tabNav: { display: "flex", background: "#fff", borderBottom: "2px solid #E0DBD0" },
+  tabBtn: { flex: 1, background: "none", border: "none", borderBottom: "2px solid transparent", color: "#444", padding: "10px 4px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: "'Inter',sans-serif", fontSize: 16 },
   tabBtnOn: { color: "#1A1A1A", borderBottom: "2px solid #F1C40F" },
 
   body: { flex: 1, padding: "16px 14px 80px", maxWidth: 640, margin: "0 auto", width: "100%" },
 
-  loading: { display: "flex", alignItems: "center", gap: 12, color: "#888", fontSize: 13, padding: 32 },
-  emptyState: { textAlign: "center", padding: "40px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, color: "#888", fontSize: 14 },
+  loading: { display: "flex", alignItems: "center", gap: 12, color: "#444", fontSize: 13, padding: 32 },
+  emptyState: { textAlign: "center", padding: "40px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, color: "#444", fontSize: 14 },
 
-  mdContent: { fontSize: 13, lineHeight: 1.8, color: "#555" },
+  mdContent: { fontSize: 13, lineHeight: 1.8, color: "#444" },
   btnY: { background: "#F1C40F", color: "#111", border: "none", borderRadius: 8, padding: "11px 18px", fontWeight: 700, cursor: "pointer", fontSize: 13, marginTop: 16, fontFamily: "'Inter',sans-serif", width: "100%", display: "block" },
-  btnGray: { background: "#2a2a2a", color: "#555", border: "none", borderRadius: 8, padding: "9px 16px", cursor: "pointer", fontSize: 12, fontFamily: "'Inter',sans-serif" },
+  btnGray: { background: "#E8E4DC", color: "#444", border: "none", borderRadius: 8, padding: "9px 16px", cursor: "pointer", fontSize: 12, fontFamily: "'Inter',sans-serif" },
 
   chatWrap: { display: "flex", flexDirection: "column", height: "calc(100vh - 200px)" },
   chatMessages: { flex: 1, overflowY: "auto", paddingBottom: 8 },
   chatWelcome: { textAlign: "center", padding: "24px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 },
   suggestions: { display: "flex", flexDirection: "column", gap: 6, width: "100%" },
-  suggBtn: { background: "#1e1e1e", border: "1px solid #EAE6DF", color: "#aaa", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 12, textAlign: "left", fontFamily: "'Inter',sans-serif" },
+  suggBtn: { background: "#F8F6F2", border: "1px solid #EAE6DF", color: "#888", borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: 12, textAlign: "left", fontFamily: "'Inter',sans-serif" },
   bubble: { margin: "8px 0", padding: "10px 14px", borderRadius: 12, maxWidth: "88%", fontSize: 13 },
-  bubbleUser: { background: "#1e2e3e", color: "#1A1A1A", marginLeft: "auto", borderBottomRightRadius: 4 },
-  bubbleAI: { background: "#1e1e1e", color: "#ddd", marginRight: "auto", borderBottomLeftRadius: 4 },
-  aiLabel: { fontSize: 10, color: "#555", marginBottom: 4 },
+  bubbleUser: { background: "#EEF4FF", color: "#1A1A1A", marginLeft: "auto", borderBottomRightRadius: 4 },
+  bubbleAI: { background: "#F8F6F2", color: "#444", marginRight: "auto", borderBottomLeftRadius: 4 },
+  aiLabel: { fontSize: 10, color: "#444", marginBottom: 4 },
   typingDots: { display: "flex", gap: 4, alignItems: "center" },
-  chatInput: { display: "flex", gap: 8, padding: "10px 0 0", borderTop: "1px solid #222", marginTop: 8 },
+  chatInput: { display: "flex", gap: 8, padding: "10px 0 0", borderTop: "2px solid #E0DBD0", marginTop: 8 },
   chatInputField: { flex: 1, background: "#fff", border: "1px solid #EAE6DF", color: "#1A1A1A", borderRadius: 8, padding: "10px 14px", fontSize: 13, fontFamily: "'Inter',sans-serif", outline: "none" },
 
   qCard: { background: "#fff", borderRadius: 10, padding: 14, marginBottom: 12 },
-  qNum: { fontSize: 10, color: "#666", marginBottom: 4, fontWeight: 700 },
+  qNum: { fontSize: 10, color: "#444", marginBottom: 4, fontWeight: 700 },
   qText: { fontSize: 13, color: "#1A1A1A", marginBottom: 12, lineHeight: 1.6 },
   qOptions: { display: "flex", flexDirection: "column", gap: 6 },
   optBtn: { borderRadius: 8, padding: "9px 14px", cursor: "pointer", fontSize: 12, textAlign: "left", fontFamily: "'Inter',sans-serif", transition: "all 0.15s" },
-  explanation: { marginTop: 10, fontSize: 11, color: "#888", fontStyle: "italic", borderTop: "1px solid #2a2a2a", paddingTop: 8 },
+  explanation: { marginTop: 10, fontSize: 11, color: "#444", fontStyle: "italic", borderTop: "1px solid #2a2a2a", paddingTop: 8 },
   resultBanner: { border: "1px solid", borderRadius: 12, padding: "18px 16px", marginBottom: 16, textAlign: "center" },
 
   card: { background: "#fff", borderRadius: 12, padding: 16, marginBottom: 14 },
   cardTitle: { fontWeight: 700, fontSize: 14, color: "#bbb", marginBottom: 10 },
-  dropZone: { background: "#161616", border: "2px dashed", borderRadius: 10, padding: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 130, marginTop: 8 },
+  dropZone: { background: "#F8F6F2", border: "2px dashed", borderRadius: 10, padding: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 130, marginTop: 8 },
   warningBox: { background: "#2a1f10", border: "1px solid #553", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#cc9", marginBottom: 14 },
 
   unlockChecklist: { background: "#fff", borderRadius: 10, padding: 16 },
-  checkItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#555", marginBottom: 8 },
+  checkItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#444", marginBottom: 8 },
 };
 
 const CSS = `

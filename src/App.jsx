@@ -61,7 +61,7 @@ export default function App() {
 }
 
 const S = {
-  toggle: { position:"fixed",top:0,right:0,zIndex:500,display:"flex",background:"#fff",borderBottomLeftRadius:12,overflow:"hidden",border:"1px solid #E8E4DC",borderTop:"none",borderRight:"none",boxShadow:"0 2px 8px rgba(0,0,0,.06)" },
+  toggle: { position:"fixed",top:0,right:0,zIndex:500,display:"flex",background:"#fff",borderBottomLeftRadius:12,overflow:"hidden",border:"1px solid #E0DBD0",borderTop:"none",borderRight:"none",boxShadow:"0 2px 8px rgba(0,0,0,.06)" },
   tBtn: { background:"none",border:"none",color:"#AAA",padding:"6px 14px",cursor:"pointer",fontSize:12,fontFamily:"'Inter',sans-serif" },
   tBtnOnY: { color:"#C8A84B",borderBottom:"2px solid #C8A84B" },
   tBtnOnG: { color:"#52A852",borderBottom:"2px solid #52A852" },
