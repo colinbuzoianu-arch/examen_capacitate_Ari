@@ -201,7 +201,13 @@ export function buildWeeklyPlan() {
 export const WEEKLY_PLAN = buildWeeklyPlan();
 
 export function fmt(date) { return date.toLocaleDateString("ro-RO", { day: "numeric", month: "short" }); }
-export function daysLeft(t) { return Math.max(0, Math.ceil((t - new Date()) / 86400000)); }
+export function daysLeft(t) {
+  // Use calendar date difference, not milliseconds — avoids off-by-one from Math.ceil
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  return Math.max(0, Math.round((target - today) / 86400000));
+}
 export function getWeekStatus(w) {
   const n = new Date();
   if (n < w.start) return "future";

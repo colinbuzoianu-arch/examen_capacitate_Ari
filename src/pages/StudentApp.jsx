@@ -167,6 +167,26 @@ function Header({ gamState, onXpClick }) {
 }
 
 function CdPill({ label, date, days, color, bg, border }) {
+  const [displayed, setDisplayed] = useState(100);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    // Animate from 100 down to actual days
+    if (done) { setDisplayed(days); return; }
+    let current = 100;
+    const step = () => {
+      current = current - Math.ceil((current - days) / 6);
+      if (current <= days) { setDisplayed(days); setDone(true); return; }
+      setDisplayed(current);
+      setTimeout(step, 30);
+    };
+    const delay = setTimeout(step, 200);
+    return () => clearTimeout(delay);
+  }, []);
+
+  // Keep in sync after animation
+  useEffect(() => { if (done) setDisplayed(days); }, [days, done]);
+
   return (
     <div style={{ flex:1, background: bg, border:`1px solid ${border}`, borderRadius:10, padding:"8px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
       <div>
@@ -174,7 +194,8 @@ function CdPill({ label, date, days, color, bg, border }) {
         <div style={{ fontSize:13, fontWeight:800, color, fontFamily:"'Syne',sans-serif" }}>{date}</div>
       </div>
       <div style={{ textAlign:"right" }}>
-        <div style={{ fontSize:22, fontWeight:800, color, fontFamily:"'Syne',sans-serif", lineHeight:1 }}>{days}</div>
+        <div style={{ fontSize:22, fontWeight:800, color, fontFamily:"'Syne',sans-serif", lineHeight:1, transition:"color .1s",
+          opacity: done ? 1 : 0.85 }}>{displayed}</div>
         <div style={{ fontSize:10, color, fontFamily:"'Inter',sans-serif", opacity:0.7 }}>zile</div>
       </div>
     </div>
