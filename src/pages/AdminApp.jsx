@@ -8,7 +8,8 @@ import LogsView from "./LogsView.jsx";
 export default function AdminApp({ onLogout }) {
   const [view, setView]           = useState("overview");
   const [unlockedChapters, setUL] = useState({});
-  const [manualMsg, setManualMsg] = useState("");
+  const [manualMsg, setManualMsg]     = useState("");
+  const [manualTarget, setManualTarget] = useState("");
   const [sending, setSending]     = useState(false);
   const [toast, setToast]         = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
