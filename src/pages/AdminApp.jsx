@@ -255,10 +255,36 @@ export default function AdminApp({ onLogout }) {
                               <div style={{ fontSize: 12, fontWeight: 600, color: isDone ? "#52A852" : "#333", fontFamily: "'Inter',sans-serif" }}>{ch.title}</div>
                               <div style={{ fontSize: 10, color: "#999" }}>{wk?.label}</div>
                             </div>
-                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                              {[["Lecție", !!data.content], [`Quiz ${data.quizResult?.score || "—"}/10`, data.quizResult?.passed], ["📸", !!data.screenshot]].map(([label, done]) => (
+                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
+                              {[["Lecție", !!data.content], [`Quiz ${data.quizResult?.score || "—"}/10`, data.quizResult?.passed], ["📸", !!(data.screenshot || (data.screenshots && data.screenshots.length > 0))]].map(([label, done]) => (
                                 <span key={label} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 6, background: done ? "#EAF5EA" : "#F0EDE6", color: done ? "#52A852" : "#BBB", border: `1px solid ${done ? "#C8E6C9" : "#E8E4DC"}`, fontFamily: "'Inter',sans-serif" }}>{label}</span>
                               ))}
+                              {!isDone ? (
+                                <button
+                                  onClick={() => {
+                                    const current = ls.get("unlocked") || {};
+                                    const updated = { ...current, [ch.id]: true };
+                                    ls.set("unlocked", updated);
+                                    setUL(updated);
+                                    showToast(`✅ ${ch.title} bifat manual`);
+                                  }}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#1A1A1A", color: "#fff", border: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
+                                  + Bifează
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    const current = ls.get("unlocked") || {};
+                                    const updated = { ...current };
+                                    delete updated[ch.id];
+                                    ls.set("unlocked", updated);
+                                    setUL(updated);
+                                    showToast(`↩️ ${ch.title} anulat`);
+                                  }}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#FFF0EE", color: "#C62828", border: "1px solid #FFCDD2", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
+                                  Anulează
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
