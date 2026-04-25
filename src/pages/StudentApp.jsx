@@ -137,6 +137,12 @@ export default function StudentApp() {
 function Header({ gamState, onXpClick }) {
   const totalXP = gamState?.totalXP || 0;
   const streak  = gamState?.currentStreak || 0;
+  // Re-render every 60s so countdown stays accurate
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick(n => n + 1), 60000);
+    return () => clearInterval(t);
+  }, []);
   return (
     <header style={S.header}>
       {/* Logo row */}
