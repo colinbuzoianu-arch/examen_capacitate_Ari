@@ -8,7 +8,7 @@ import { chapterUnlockEmailHtml } from "../utils/emailTemplates.js";
 import ChapterPage from "./ChapterPage.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import GamificationWidget from "./GamificationWidget.jsx";
-import { getGamState, getLevel, getLevelProgress, recordChapterUnlock, BADGES, resyncBadges } from "../utils/gamification.js";
+import { getGamState, getLevel, getLevelProgress, recordChapterUnlock, BADGES, saveGamState, addXP } from "../utils/gamification.js";
 
 // ── Motivational quips ────────────────────────────────────────────────────────
 function getQuip(done, total) {
@@ -62,7 +62,32 @@ export default function StudentApp() {
   }, [user?.userId]);
   const [toast, setToast]         = useState(null);
   const [showGam, setShowGam]       = useState(false);
-  const [gamState, setGamState]     = useState(() => resyncBadges() || getGamState());
+  const [gamState, setGamState]     = useState(() => {
+    // Inline resync — fixes badges missed due to bugs
+    const state = getGamState();
+    const allIds = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
+    let quizzesPassed = 0, perfectQuizzes = 0, screenshots = 0;
+    allIds.forEach(id => {
+      const ch = ls.get(`chapter_${id}`) || {};
+      if (ch.quizResult?.passed) quizzesPassed++;
+      if (ch.quizResult?.score === 10) perfectQuizzes++;
+      if (ch.screenshot || ch.screenshots?.length) screenshots++;
+    });
+    let changed = false;
+    if (quizzesPassed > (state.quizzesPassed || 0)) { state.quizzesPassed = quizzesPassed; changed = true; }
+    if (perfectQuizzes > (state.perfectQuizzes || 0)) { state.perfectQuizzes = perfectQuizzes; changed = true; }
+    if (screenshots > (state.screenshots || 0)) { state.screenshots = screenshots; changed = true; }
+    if (changed) {
+      const newBadges = BADGES.filter(b => !state.unlockedBadges.includes(b.id) && b.condition(state));
+      newBadges.forEach(b => {
+        state.unlockedBadges.push(b.id);
+        state.newBadges = [...(state.newBadges || []), b.id];
+        if (b.xpReward > 0) state.totalXP = (state.totalXP || 0) + b.xpReward;
+      });
+      saveGamState(state);
+    }
+    return state;
+  });
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3200); }
 
