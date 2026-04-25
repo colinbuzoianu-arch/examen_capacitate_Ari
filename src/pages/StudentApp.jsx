@@ -24,7 +24,24 @@ function getQuip(done, total) {
 export default function StudentApp() {
   const [view, setView]             = useState("dashboard");
   const [openChapter, setOpen]      = useState(null);
-  const [unlockedChapters, setUL]   = useState(() => ls.get("unlocked") || {});
+  const [unlockedChapters, setUL]   = useState(() => {
+    const saved = ls.get("unlocked") || {};
+    // Auto-recover: check all chapters whose quiz+screenshot are done but not in unlocked
+    const allChapters = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters];
+    let recovered = { ...saved };
+    let didRecover = false;
+    allChapters.forEach(ch => {
+      if (!recovered[ch.id]) {
+        const chapData = ls.get(`chapter_${ch.id}`) || {};
+        if (chapData.quizResult?.passed && chapData.screenshot) {
+          recovered[ch.id] = true;
+          didRecover = true;
+        }
+      }
+    });
+    if (didRecover) ls.set("unlocked", recovered);
+    return recovered;
+  });
   const [activeWeek, setActiveWeek] = useState(() => {
     const cur = WEEKS.find(w => getWeekStatus(w) === "current") || WEEKS[0];
     return cur.id;

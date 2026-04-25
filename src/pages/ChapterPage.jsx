@@ -41,13 +41,17 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   const fileRef = useRef();
 
   // unlock status
-  const quizPassed    = quizResult?.passed;
-  const hasScreenshot = !!screenshot;
+  const quizPassed    = quizResult?.passed || saved.quizResult?.passed;
+  const hasScreenshot = !!screenshot || !!saved.screenshot;
   const isUnlocked    = quizPassed && hasScreenshot;
 
-  // Persist all state
+  // Use ref so persist always has latest saved value (avoids stale closure bug)
+  const savedRef = useRef(saved);
+  useEffect(() => { savedRef.current = saved; }, [saved]);
+
   function persist(patch) {
-    const updated = { ...saved, ...patch };
+    const updated = { ...savedRef.current, ...patch };
+    savedRef.current = updated;
     setSaved(updated);
     ls.set(storageKey, updated);
   }
@@ -130,14 +134,14 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
     try {
       const result = await evaluateQuiz(chapter, quiz.questions, answers);
       setQuizResult(result);
-      persist({ quizResult: result });
-      const attemptNum = (saved.quizAttempts || 0) + 1;
-      persist({ quizAttempts: attemptNum });
+      const attemptNum = (savedRef.current.quizAttempts || 0) + 1;
+      persist({ quizResult: result, quizAttempts: attemptNum });
       logger.quizSubmitted(chapter, subject, result.score, result.passed, answers, quiz.questions, attemptNum);
       recordQuizAttempt(result.score, result.passed);
       if (result.passed) {
-        // check if we can unlock
-        if (hasScreenshot) { onUnlock(chapterId); }
+        // check screenshot from ref (catches screenshots uploaded in previous sessions)
+        const screenshotExists = !!savedRef.current.screenshot || hasScreenshot;
+        if (screenshotExists) { onUnlock(chapterId); }
       }
     } catch {
       alert("Eroare la evaluare. Încearcă din nou.");
@@ -160,7 +164,9 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       persist({ screenshot: img });
       logger.screenshotUploaded(chapter, subject);
       recordScreenshot();
-      if (quizPassed) onUnlock(chapterId);
+      // check quiz from ref (catches quizzes done in previous sessions)
+      const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
+      if (quizPassedNow) onUnlock(chapterId);
     };
     reader.readAsDataURL(file);
   }
