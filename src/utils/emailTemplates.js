@@ -2,7 +2,7 @@
 // Used by AdminApp and cron-reminder
 
 export function reminderEmailHtml({
-  studentName = "Ari",
+  studentName = "Elev",
   weekLabel,
   weekStart,
   weekEnd,

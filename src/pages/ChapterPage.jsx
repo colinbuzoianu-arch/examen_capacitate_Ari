@@ -1,21 +1,43 @@
 import React, { useState, useEffect, useRef } from "react";
+import { cloudGet, cloudSet } from "../utils/cloudStorage.js";
 import { ls } from "../utils/storage.js";
 import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import { recordContentRead, recordChatMessage, recordQuizAttempt, recordScreenshot } from "../utils/gamification.js";
 
 // ── CHAPTER PAGE ─────────────────────────────────────────────────────────────
 // Tab flow: Conținut → Chat → Quiz → Screenshot → (unlocks chapter)
-export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
+export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlock }) {
+  const { user } = useAuth();
   const sub     = SUBJECTS[subject];
   const chapter = sub.chapters.find(c => c.id === chapterId);
-  const storageKey = `chapter_${chapterId}`;
+  const storageKey = userId ? `chapter_${chapterId}` : `chapter_${chapterId}`;
+  const cloudKey = `chapter_${chapterId}`;
 
   const [tab, setTab]           = useState("content");   // content|chat|quiz|screenshot
+  const [cloudLoaded, setCloudLoaded] = useState(false);
 
-  // Log chapter opened
-  useEffect(() => { logger.chapterOpened(chapter, subject); }, []);
+  // Log chapter opened + load from cloud
+  useEffect(() => {
+    logger.chapterOpened(chapter, subject);
+    cloudGet(cloudKey).then(val => {
+      if (val) {
+        savedRef.current = val;
+        setSaved(val);
+        if (val.content)     setContent(val.content);
+        if (val.chatHistory) setChatHistory(val.chatHistory);
+        if (val.quiz)        setQuiz(val.quiz);
+        if (val.quizAnswers) setAnswers(val.quizAnswers);
+        if (val.quizResult)  setQuizResult(val.quizResult);
+        if (val.screenshots) setScreenshots(val.screenshots);
+        else if (val.screenshot) setScreenshots([val.screenshot]);
+        savedRef.current = val;
+      }
+      setCloudLoaded(true);
+    });
+  }, [userId]);
   const [saved, setSaved]       = useState(() => ls.get(storageKey) || {});
 
   // content
@@ -37,10 +59,9 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   const [evaluating, setEvaluating] = useState(false);
 
   // screenshot
-  // screenshots is an array — supports multiple uploads
   const [screenshots, setScreenshots] = useState(() => {
-    if (saved.screenshots) return saved.screenshots; // new format
-    if (saved.screenshot)  return [saved.screenshot]; // migrate old single
+    if (saved.screenshots) return saved.screenshots;
+    if (saved.screenshot)  return [saved.screenshot];
     return [];
   });
   const fileRef = useRef();
@@ -50,7 +71,8 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   const hasScreenshot = screenshots.length > 0 || (savedRef.current?.screenshots?.length > 0) || !!savedRef.current?.screenshot;
   const isUnlocked    = quizPassed && hasScreenshot;
 
-  // Use ref so persist always has latest saved value (avoids stale closure bug)
+  // Persist all state
+  // Ref always holds latest saved — avoids stale closure bug
   const savedRef = useRef(saved);
   useEffect(() => { savedRef.current = saved; }, [saved]);
 
@@ -58,7 +80,8 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
     const updated = { ...savedRef.current, ...patch };
     savedRef.current = updated;
     setSaved(updated);
-    ls.set(storageKey, updated);
+    ls.set(storageKey, updated); // local cache
+    cloudSet(cloudKey, updated); // cloud sync
   }
 
   // Scroll chat to bottom
@@ -92,7 +115,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
     setChatInput("");
     setLoadingChat(true);
     try {
-      const reply = await chatWithTutor(chapter, newHistory, msg);
+      const reply = await chatWithTutor(chapter, newHistory, msg, user?.name?.split(" ")[0] || "elev");
       const fullHistory = [...newHistory, { role: "assistant", content: reply }];
       setChatHistory(fullHistory);
       persist({ chatHistory: fullHistory });
@@ -137,14 +160,14 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
     }
     setEvaluating(true);
     try {
-      const result = await evaluateQuiz(chapter, quiz.questions, answers);
+      const result = await evaluateQuiz(chapter, quiz.questions, answers, user?.name?.split(" ")[0] || "tu");
       setQuizResult(result);
       const attemptNum = (savedRef.current.quizAttempts || 0) + 1;
       persist({ quizResult: result, quizAttempts: attemptNum });
       logger.quizSubmitted(chapter, subject, result.score, result.passed, answers, quiz.questions, attemptNum);
       recordQuizAttempt(result.score, result.passed);
       if (result.passed) {
-        // check screenshot from ref (catches screenshots uploaded in previous sessions)
+        // check if we can unlock
         const screenshotExists = !!savedRef.current.screenshot || hasScreenshot;
         if (screenshotExists) { onUnlock(chapterId); }
       }
@@ -163,19 +186,17 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   function handleFile(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    // Read all selected files
     files.forEach(file => {
       const reader = new FileReader();
       reader.onload = ev => {
         const img = ev.target.result;
         setScreenshots(prev => {
           const updated = [...prev, img];
-          persist({ screenshots: updated, screenshot: updated[0] }); // keep screenshot for backward compat
+          persist({ screenshots: updated, screenshot: updated[0] });
           return updated;
         });
         logger.screenshotUploaded(chapter, subject);
         recordScreenshot();
-        // Only call onUnlock once — for first screenshot that triggers the condition
         const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
         if (quizPassedNow && !savedRef.current._unlockCalled) {
           savedRef.current._unlockCalled = true;
@@ -184,7 +205,6 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
       };
       reader.readAsDataURL(file);
     });
-    // Reset input so same file can be selected again
     e.target.value = "";
   }
 
@@ -273,7 +293,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                 <div style={S.chatWelcome}>
                   <div style={{ fontSize: 32 }}>🤖</div>
                   <p style={{ color: "#444", fontSize: 13 }}>
-                    Bună Ari! Sunt tutorele tău pentru <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
+                    Bună{user?.name ? ` ${user.name.split(" ")[0]}` : ""}! Sunt tutorele tău pentru <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
                     <br />Întreabă-mă orice despre această temă!
                   </p>
                   <div style={S.suggestions}>
@@ -437,7 +457,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                 <div style={{ textAlign: "center", color: "#AAA" }}>
                   <div style={{ fontSize: 32 }}>📷</div>
                   <div style={{ fontSize: 13, color: "#888" }}>
-                    {screenshots.length > 0 ? `${screenshots.length} poze încărcate — apasă pentru a adăuga` : "Apasă pentru a alege poze sau screenshots"}
+                    {screenshots.length > 0 ? `${screenshots.length} poze — apasă pentru a adăuga` : "Apasă pentru a alege poze sau screenshots"}
                   </div>
                   <div style={{ fontSize: 11, color: "#BBB", marginTop: 4 }}>Poți selecta mai multe poze deodată</div>
                 </div>
@@ -474,7 +494,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                 <div style={{ fontSize: 32 }}>🏆</div>
                 <div style={{ fontWeight: 800, fontSize: 16, color: "#2E7D32", fontFamily: "'Syne',sans-serif" }}>Capitol bifat cu succes!</div>
                 <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
-                  Quiz trecut + dovada încărcată. Felicitări Ari! 💪
+                  Quiz trecut + dovada încărcată. Felicitări!
                 </div>
               </div>
             ) : (

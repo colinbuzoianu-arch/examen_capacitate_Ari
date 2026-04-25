@@ -7,11 +7,13 @@ import LogsView from "./LogsView.jsx";
 
 export default function AdminApp({ onLogout }) {
   const [view, setView]           = useState("overview");
-  const [unlockedChapters, setUL] = useState(() => ls.get('unlocked') || {});
+  const [unlockedChapters, setUL] = useState({});
   const [manualMsg, setManualMsg] = useState("");
   const [sending, setSending]     = useState(false);
   const [toast, setToast]         = useState(null);
   const [selectedImg, setSelectedImg] = useState(null);
+  const [allUsers, setAllUsers]       = useState([]);
+  const [usersLoading, setUL2]        = useState(false);
 
   useEffect(() => {
     function load() { setUL(ls.get("unlocked") || {}); }
@@ -22,6 +24,18 @@ export default function AdminApp({ onLogout }) {
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3000); }
 
+  async function loadUsers() {
+    setUL2(true);
+    try {
+      const res = await fetch("/api/admin-users", {
+        headers: { Authorization: `Bearer ${btoa("Babel2012")}` },
+      });
+      const data = await res.json();
+      if (data.ok) setAllUsers(data.users || []);
+    } catch (e) { console.error(e); }
+    setUL2(false);
+  }
+
   function doneOf(s) { return SUBJECTS[s].chapters.filter(c => unlockedChapters[c.id]).length; }
   function totalOf(s) { return SUBJECTS[s].chapters.length; }
   function doneAll() { return doneOf("romana") + doneOf("matematica"); }
@@ -31,7 +45,6 @@ export default function AdminApp({ onLogout }) {
   [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].forEach(ch => {
     const data = ls.get(`chapter_${ch.id}`);
     if (!data) return;
-    // Support both new screenshots[] and old screenshot
     const imgs = data.screenshots || (data.screenshot ? [data.screenshot] : []);
     imgs.forEach((img, i) => {
       allScreenshots.push({ ...ch, screenshot: img, screenshotIndex: i + 1, screenshotTotal: imgs.length, quizResult: data.quizResult });
@@ -45,12 +58,12 @@ export default function AdminApp({ onLogout }) {
     const done = chs.filter(c => unlockedChapters[c.id]).length;
     const pct = chs.length ? Math.round((done / chs.length) * 100) : 0;
     const res = await sendEmail({
-      to: [CONFIG.studentEmail, CONFIG.parentEmail, CONFIG.motherEmail],
+      to: [manualTarget || ""],
       subject: `📚 Reminder studiu – ${curWeek.label} · EN 2026`,
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
 <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 8px;">📚 Reminder – ${curWeek.label}</h1>
-<p style="font-size:13px;color:#666;line-height:1.6;">Hai Ari! ${done}/${chs.length} capitole bifate (${pct}%). Nu uita: quiz 8/10 + screenshot pentru fiecare capitol! 💪</p>
+<p style="font-size:13px;color:#666;line-height:1.6;">Salut! ${done}/${chs.length} capitole bifate (${pct}%). Nu uita: quiz 8/10 + screenshot pentru fiecare capitol! 💪</p>
 <a href="${window.location.origin}" style="display:inline-block;margin-top:16px;background:#1A1A1A;color:#fff;padding:11px 22px;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px;">Deschide planul →</a>
 </div></div>`,
     });
@@ -62,8 +75,8 @@ export default function AdminApp({ onLogout }) {
     if (!manualMsg.trim()) return;
     setSending(true);
     const res = await sendEmail({
-      to: [CONFIG.studentEmail, CONFIG.parentEmail, CONFIG.motherEmail],
-      subject: "✉️ Mesaj de la Tata – EN 2026",
+      to: [manualTarget || ""],
+      subject: "✉️ Mesaj de la administrator – EN 2026",
       html: `<div style="background:#F0EDE6;font-family:Georgia,serif;padding:32px;max-width:500px;margin:0 auto;">
 <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #E8E4DC;">
 <h1 style="font-size:20px;color:#1A1A1A;margin:0 0 16px;">✉️ Mesaj de la Tata</h1>
@@ -85,7 +98,7 @@ export default function AdminApp({ onLogout }) {
       <header style={S.header}>
         <div>
           <div style={S.logo}>Panou Tata 👨‍💼</div>
-          <div style={S.logoSub}>Progresul lui {CONFIG.studentName} · EN 2026</div>
+          <div style={S.logoSub}>Panou administrare · EN 2026</div>
         </div>
         <button style={S.logoutBtn} onClick={onLogout}>← Ieșire</button>
       </header>
@@ -97,6 +110,7 @@ export default function AdminApp({ onLogout }) {
           { id: "email",       icon: "✉️",  label: "Email" },
           { id: "detail",      icon: "📋", label: "Detaliu" },
           { id: "logs",        icon: "📡", label: "Loguri" },
+          { id: "users",       icon: "👥", label: "Elevi" },
         ].map(i => (
           <button key={i.id} style={{ ...S.navBtn, ...(view === i.id ? S.navOn : {}) }} onClick={() => setView(i.id)}>
             <span style={{ fontSize: 18, lineHeight: 1 }}>{i.icon}</span><span>{i.label}</span>
@@ -162,7 +176,7 @@ export default function AdminApp({ onLogout }) {
 
           {view === "screenshots" && (
             <>
-              <div style={S.cardTitle}>Dovezile lui {CONFIG.studentName}</div>
+              <div style={S.cardTitle}>Dovezi încărcate</div>
               <div style={{ marginTop: 12 }}>
                 {allScreenshots.length === 0
                   ? <p style={{ color: "#999", fontStyle: "italic", fontSize: 13 }}>Nicio dovadă încă.</p>
@@ -195,21 +209,24 @@ export default function AdminApp({ onLogout }) {
                 <p style={{ fontSize: 12, color: "#777", margin: "8px 0 14px", lineHeight: 1.6 }}>
                   Trimite un email cu progresul săptămânii curente. Include bara de progres și link la aplicație.
                 </p>
-                <div style={{ fontSize: 11, color: "#777", marginBottom: 12 }}>Către: {CONFIG.studentEmail}, {CONFIG.parentEmail}, {CONFIG.motherEmail}</div>
+                <div style={{ fontSize: 11, color: "#777", marginBottom: 12 }}>Către: {manualTarget || "(niciun destinatar selectat)"}</div>
                 <button style={{ ...S.btnDark, opacity: sending ? 0.5 : 1 }} onClick={sendReminder} disabled={sending}>
                   {sending ? "Se trimite..." : "📨 Trimite reminder acum"}
                 </button>
               </div>
 
               <div style={S.card}>
-                <div style={S.cardTitle}>✉️ Mesaj personal de la Tata</div>
+                <div style={S.cardTitle}>✉️ Trimite mesaj unui elev</div>
                 <p style={{ fontSize: 12, color: "#777", margin: "8px 0 12px", lineHeight: 1.6 }}>
-                  Scrie un mesaj personalizat pentru Ari.
+                  Scrie un mesaj și trimite-l la emailul unui elev.
                 </p>
+                <input type="email" placeholder="Email destinatar..." value={manualTarget}
+                  onChange={e => setManualTarget(e.target.value)}
+                  style={{ width: "100%", background: "#F8F6F2", border: "1px solid #E0DBD0", borderRadius: 10, padding: "9px 12px", fontSize: 12, marginBottom: 10, fontFamily: "'Inter',sans-serif", outline: "none" }} />
                 <textarea value={manualMsg} onChange={e => setManualMsg(e.target.value)}
-                  placeholder="Ex: Ari, am văzut că ai bifat primul capitol! Continuă așa! 💪"
+                  placeholder="Ex: Bună treabă! Continuă să studiezi și bifează capitolele rămase!"
                   style={S.textarea} rows={5} />
-                <div style={{ fontSize: 11, color: "#777", margin: "6px 0 12px" }}>Către: {CONFIG.studentEmail}, {CONFIG.parentEmail}, {CONFIG.motherEmail}</div>
+                <div style={{ fontSize: 11, color: "#777", margin: "6px 0 12px" }}>Către: {manualTarget || "(niciun destinatar selectat)"}</div>
                 <button style={{ ...S.btnDark, opacity: (manualMsg.trim() && !sending) ? 1 : 0.4 }}
                   onClick={sendManualMessage} disabled={!manualMsg.trim() || sending}>
                   {sending ? "Se trimite..." : "📨 Trimite mesajul"}
@@ -225,18 +242,22 @@ export default function AdminApp({ onLogout }) {
             </>
           )}
 
+          {view === "users" && (
+            <UsersView users={allUsers} loading={usersLoading} onLoad={loadUsers} />
+          )}
+
           {view === "logs" && (
             <LogsView />
           )}
 
           {view === "detail" && (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <div style={S.cardTitle}>Toate capitolele</div>
-                <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Inter',sans-serif" }}>Click pe capitol pentru a-l marca manual</div>
+                <div style={{ fontSize: 11, color: "#AAA" }}>Override manual dacă e bug</div>
               </div>
-              <div style={{ background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#7A5C00", fontFamily: "'Inter',sans-serif" }}>
-                ⚠️ Folosește override doar dacă știi că Ari a finalizat capitolul dar apare bug.
+              <div style={{ background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 10, padding: "9px 14px", marginBottom: 12, fontSize: 12, color: "#7A5C00", fontFamily: "'Inter',sans-serif" }}>
+                ⚠️ Bifează manual doar dacă știi că elevul a finalizat capitolul dar apare bug.
               </div>
               <div style={{ marginTop: 0 }}>
                 {["romana", "matematica"].map(s => {
@@ -260,28 +281,24 @@ export default function AdminApp({ onLogout }) {
                                 <span key={label} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 6, background: done ? "#EAF5EA" : "#F0EDE6", color: done ? "#52A852" : "#BBB", border: `1px solid ${done ? "#C8E6C9" : "#E8E4DC"}`, fontFamily: "'Inter',sans-serif" }}>{label}</span>
                               ))}
                               {!isDone ? (
-                                <button
-                                  onClick={() => {
-                                    const current = ls.get("unlocked") || {};
-                                    const updated = { ...current, [ch.id]: true };
-                                    ls.set("unlocked", updated);
-                                    setUL(updated);
-                                    showToast(`✅ ${ch.title} bifat manual`);
-                                  }}
-                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#1A1A1A", color: "#fff", border: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
+                                <button onClick={() => {
+                                  const cur = ls.get("unlocked") || {};
+                                  const upd = { ...cur, [ch.id]: true };
+                                  ls.set("unlocked", upd);
+                                  setUL(upd);
+                                  showToast(`✅ ${ch.title} bifat manual`);
+                                }} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#1A1A1A", color: "#fff", border: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
                                   + Bifează
                                 </button>
                               ) : (
-                                <button
-                                  onClick={() => {
-                                    const current = ls.get("unlocked") || {};
-                                    const updated = { ...current };
-                                    delete updated[ch.id];
-                                    ls.set("unlocked", updated);
-                                    setUL(updated);
-                                    showToast(`↩️ ${ch.title} anulat`);
-                                  }}
-                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#FFF0EE", color: "#C62828", border: "1px solid #FFCDD2", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
+                                <button onClick={() => {
+                                  const cur = ls.get("unlocked") || {};
+                                  const upd = { ...cur };
+                                  delete upd[ch.id];
+                                  ls.set("unlocked", upd);
+                                  setUL(upd);
+                                  showToast(`↩️ ${ch.title} anulat`);
+                                }} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#FFF0EE", color: "#C62828", border: "1px solid #FFCDD2", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
                                   Anulează
                                 </button>
                               )}
@@ -301,6 +318,61 @@ export default function AdminApp({ onLogout }) {
 
       {toast && <div style={S.toast}>{toast}</div>}
       <style>{`* { box-sizing: border-box; } ::-webkit-scrollbar { display: none; } body { background: #F0EDE6; }`}</style>
+    </div>
+  );
+}
+
+function UsersView({ users, loading, onLoad }) {
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" }}>
+          👥 Elevi înregistrați ({users.length})
+        </div>
+        <button style={{ background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Inter',sans-serif", fontWeight: 600 }}
+          onClick={onLoad}>
+          {loading ? "Se încarcă..." : "🔄 Reîncarcă"}
+        </button>
+      </div>
+      {users.length === 0 && !loading && (
+        <div style={{ color: "#AAA", fontStyle: "italic", fontSize: 13, textAlign: "center", padding: "30px 0" }}>
+          Apasă Reîncarcă pentru a vedea elevii
+        </div>
+      )}
+      {users.map(u => (
+        <div key={u.userId} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: "1px solid #E0DBD0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" }}>{u.name}</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{u.email}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#C8A84B", fontFamily: "'Syne',sans-serif" }}>⚡ {u.stats?.totalXP || 0} XP</div>
+              {u.stats?.currentStreak > 0 && <div style={{ fontSize: 11, color: "#E65100" }}>🔥 {u.stats.currentStreak} zile streak</div>}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Stat2 label="Capitole bifate" value={`${u.stats?.unlockedChapters || 0}/15`} color="#2E7D32" />
+            <Stat2 label="Quiz-uri trecute" value={u.stats?.quizzesPassed || 0} color="#1A5276" />
+            {u.stats?.avgQuizScore && <Stat2 label="Medie quiz" value={`${u.stats.avgQuizScore}/10`} color="#C8A84B" />}
+            {u.stats?.lastSeen && <Stat2 label="Ultima activitate" value={new Date(u.stats.lastSeen).toLocaleDateString("ro-RO")} color="#888" />}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ height: 6, background: "#F0EDE6", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round(((u.stats?.unlockedChapters || 0) / 15) * 100)}%`, background: "#C8A84B", borderRadius: 3 }} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Stat2({ label, value, color }) {
+  return (
+    <div style={{ background: "#F8F6F2", borderRadius: 8, padding: "5px 10px", border: "1px solid #E0DBD0" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color, fontFamily: "'Syne',sans-serif" }}>{value}</div>
+      <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'Inter',sans-serif" }}>{label}</div>
     </div>
   );
 }

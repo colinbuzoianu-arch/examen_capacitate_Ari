@@ -141,7 +141,7 @@ Reguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație s
 }
 
 // ── Evaluate quiz answers ─────────────────────────────────────────────────────
-export async function evaluateQuiz(chapter, questions, answers) {
+export async function evaluateQuiz(chapter, questions, answers, userName = "tu") {
   const system = `Ești un tutore pentru elevi de clasa a VIII-a România. Răspunde în română, prietenos și încurajator.`;
 
   const summary = questions.map((q, i) => ({
@@ -154,13 +154,13 @@ export async function evaluateQuiz(chapter, questions, answers) {
 
   const score = summary.filter(s => s.corect).length;
 
-  const prompt = `Ari a terminat quiz-ul la capitolul "${chapter.title}". Scor: ${score}/10.
+  const prompt = `${userName} a terminat quiz-ul la capitolul "${chapter.title}". Scor: ${score}/10.
 
 Răspunsurile lui:
 ${JSON.stringify(summary, null, 2)}
 
 Scrie un feedback personalizat de 3-4 propoziții:
-1. Felicită-l dacă a trecut (${score >= 8 ? "DA, a trecut" : "NU, nu a trecut"})
+1. Felicită-l/felicit-o dacă a trecut (${score >= 8 ? "DA, a trecut" : "NU, nu a trecut"})
 2. Menționează 1-2 greșeli specifice pe care să le revadă
 3. Încurajare pentru continuare
 4. Dacă nu a trecut, spune-i ce capitol să revadă
@@ -172,8 +172,9 @@ Fii cald, direct și motivant. Maxim 80 cuvinte.`;
 }
 
 // ── Chapter chat ──────────────────────────────────────────────────────────────
-export async function chatWithTutor(chapter, history, userMessage) {
-  const system = `Ești tutorele personal al lui Ari, elev în clasa a VIII-a la Școala Babel Timișoara.
+export async function chatWithTutor(chapter, history, userMessage, userName = "elev") {
+  const system = `Ești tutorele unui elev de clasa a VIII-a care se pregătește pentru Evaluarea Națională 2026.
+Nume elev: ${userName}.
 Îl ajuți să se pregătească pentru Evaluarea Națională 2026.
 Capitolul curent: "${chapter.title}".
 Context: ${chapter.aiContext}

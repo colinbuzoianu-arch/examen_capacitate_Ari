@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { ls } from "../utils/storage.js";
+import { cloudGet, cloudSet } from "../utils/cloudStorage.js";
+import { ls } from "../utils/storage.js"; // fallback for sync reads
 import { sendEmail } from "../utils/api.js";
 import { SUBJECTS, WEEKS, WEEKLY_PLAN, EXAM_ROMANA, EXAM_MATH, fmt, daysLeft, getWeekStatus, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
 import { chapterUnlockEmailHtml } from "../utils/emailTemplates.js";
 import ChapterPage from "./ChapterPage.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import GamificationWidget from "./GamificationWidget.jsx";
 import { getGamState, getLevel, getLevelProgress, recordChapterUnlock, BADGES, resyncBadges } from "../utils/gamification.js";
 
@@ -17,45 +19,47 @@ function getQuip(done, total) {
   if (done === Math.floor(total / 2)) return "Jumătate gata! Știi ce înseamnă asta? Că e mai ușor de-acum. 🔥";
   if (done <= total - 3)  return "Ești în top la disciplina 'bifat'. Dacă poți asta, poți și examenul! 🚀";
   if (done === total - 2)  return "Aproape! Ultimele capitole sunt ca ultimele 5 min dintr-un film. 🎬";
-  if (done === total - 1)  return "Un singur capitol! Ari, ești un monstru. Serios. 👑";
-  return "PERFECT! 15/15. Examenul e deja în buzunar. Mult succes! 🏆";
+  if (done === total - 1)  return "Un singur capitol rămas! Ești un monstru. Serios. 👑";
+  return "PERFECT! 15/15 capitole bifate. Examenul e deja în buzunar. 🏆";
 }
 
 export default function StudentApp() {
+  const { user } = useAuth();
   const [view, setView]             = useState("dashboard");
   const [openChapter, setOpen]      = useState(null);
-  const [unlockedChapters, setUL]   = useState(() => {
-    // Start from unlocked key
-    let recovered = { ...(ls.get("unlocked") || {}) };
-
-    // Migration: old app used "progress" key with { r1: { done: true } }
-    const oldProgress = ls.get("progress") || {};
-    Object.entries(oldProgress).forEach(([id, val]) => {
-      if (val?.done && !recovered[id]) {
-        recovered[id] = true;
-      }
-    });
-
-    // Auto-recover: any chapter with quiz passed + screenshot = unlock it
-    const allChapters = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters];
-    allChapters.forEach(ch => {
-      if (!recovered[ch.id]) {
-        const chapData = ls.get(`chapter_${ch.id}`) || {};
-        const hasProof = chapData.screenshot || (chapData.screenshots && chapData.screenshots.length > 0);
-        if (chapData.quizResult?.passed && hasProof) {
-          recovered[ch.id] = true;
-        }
-      }
-    });
-
-    // Save merged result
-    ls.set("unlocked", recovered);
-    return recovered;
-  });
+  const [unlockedChapters, setUL]   = useState({});
   const [activeWeek, setActiveWeek] = useState(() => {
     const cur = WEEKS.find(w => getWeekStatus(w) === "current") || WEEKS[0];
     return cur.id;
   });
+
+  // Load progress from cloud on mount + auto-recover
+  useEffect(() => {
+    const allChapters = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters];
+
+    cloudGet("unlocked").then(async (saved) => {
+      let recovered = { ...(saved || {}) };
+      let didRecover = false;
+
+      // Auto-recover: check each chapter's cloud data
+      // If quiz passed + screenshot exist but not in unlocked → add it
+      await Promise.all(allChapters.map(async (ch) => {
+        if (!recovered[ch.id]) {
+          try {
+            const chapData = await cloudGet(`chapter_${ch.id}`);
+            const hasProof = chapData?.screenshot || (chapData?.screenshots && chapData.screenshots.length > 0);
+            if (chapData?.quizResult?.passed && hasProof) {
+              recovered[ch.id] = true;
+              didRecover = true;
+            }
+          } catch {}
+        }
+      }));
+
+      if (didRecover) cloudSet("unlocked", recovered);
+      setUL(recovered);
+    });
+  }, [user?.userId]);
   const [toast, setToast]         = useState(null);
   const [showGam, setShowGam]       = useState(false);
   const [gamState, setGamState]     = useState(() => resyncBadges() || getGamState());
@@ -63,14 +67,13 @@ export default function StudentApp() {
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3200); }
 
   function handleUnlock(chapterId) {
-    // Use functional update to always have latest state (avoids stale closure)
     let saved;
     setUL(prev => {
       saved = { ...prev, [chapterId]: true };
-      ls.set("unlocked", saved);
       return saved;
     });
     const updated = { ...unlockedChapters, [chapterId]: true };
+    cloudSet("unlocked", updated);
     logger.chapterUnlocked({ id: chapterId, title: chapterId }, "unknown");
     // Record gamification
     const roChaps = SUBJECTS.romana.chapters;
@@ -79,16 +82,18 @@ export default function StudentApp() {
     const roComplete = roChaps.every(c => newUnlocked[c.id]);
     const maComplete = maChaps.every(c => newUnlocked[c.id]);
     recordChapterUnlock(Object.keys(newUnlocked).length, roComplete, maComplete);
-    setGamState(getGamState());
-    showToast("🎉 Capitol bifat! Bravo Ari!");
+    const gState = getGamState();
+    setGamState(gState);
+    cloudSet("gamification", gStateNew);
+    showToast(`🎉 Capitol bifat! Bravo ${user?.name?.split(" ")[0] || "tu"}!`);
     const ch = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(c => c.id === chapterId);
     const chapData = ls.get(`chapter_${chapterId}`) || {};
-    const gState   = getGamState();
+    const gStateNew = getGamState();
     sendEmail({
-      to: [CONFIG.parentEmail, CONFIG.motherEmail],
-      subject: `🏆 Ari a bifat: ${ch?.title}`,
+      to: [user?.email],  // notify the student themselves
+      subject: `🏆 ${user?.name} a bifat: ${ch?.title}`,
       html: chapterUnlockEmailHtml({
-        studentName: CONFIG.studentName,
+        studentName: user?.name || "Elev",
         chapterTitle: ch?.title || chapterId,
         subject: [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(x => x.id === chapterId)?.subject || "romana",
         score: chapData.quizResult?.score || 0,
@@ -110,7 +115,7 @@ export default function StudentApp() {
     return (
       <>
         <ChapterPage chapterId={openChapter.chapterId} subject={openChapter.subject}
-          onBack={() => setOpen(null)} onUnlock={handleUnlock} />
+          userId={user?.userId} onBack={() => setOpen(null)} onUnlock={handleUnlock} />
         {toast && <Toast msg={toast} />}
       </>
     );
@@ -128,7 +133,7 @@ export default function StudentApp() {
 
       {showGam && <GamificationWidget onClose={() => { setShowGam(false); setGamState(getGamState()); }} />}
       <main style={S.main}>
-        {view === "dashboard" && <Dashboard pct={pct} doneAll={doneAll} totalAll={totalAll} doneOf={doneOf} totalOf={totalOf} setView={setView} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
+        {view === "dashboard" && <Dashboard pct={pct} doneAll={doneAll} totalAll={totalAll} doneOf={doneOf} totalOf={totalOf} setView={setView} unlockedChapters={unlockedChapters} setOpen={setOpen} user={user} />}
         {view === "plan"      && <Plan activeWeek={activeWeek} setActiveWeek={setActiveWeek} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
         {view === "progress"  && <Progress doneOf={doneOf} totalOf={totalOf} unlockedChapters={unlockedChapters} setOpen={setOpen} />}
       </main>
@@ -143,7 +148,6 @@ export default function StudentApp() {
 function Header({ gamState, onXpClick }) {
   const totalXP = gamState?.totalXP || 0;
   const streak  = gamState?.currentStreak || 0;
-  // Re-render every 60s so countdown stays accurate
   const [, setTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setTick(n => n + 1), 60000);
@@ -154,8 +158,8 @@ function Header({ gamState, onXpClick }) {
       {/* Logo row */}
       <div style={S.headerTop}>
         <div>
-          <div style={S.logo}>EN<span style={{ color: "#C8A84B" }}>'26</span> · Ari</div>
-          <div style={S.logoSub}>Evaluarea Națională · Babel Timișoara</div>
+          <div style={S.logo}>EN<span style={{ color: "#C8A84B" }}>'26</span></div>
+          <div style={S.logoSub}>Evaluarea Națională 2026</div>
         </div>
         {/* XP chip — right side of logo row */}
         <button onClick={onXpClick} style={S.xpChip}>
@@ -177,7 +181,6 @@ function CdPill({ label, date, days, color, bg, border }) {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    // Animate from 100 down to actual days
     if (done) { setDisplayed(days); return; }
     let current = 100;
     const step = () => {
@@ -190,7 +193,6 @@ function CdPill({ label, date, days, color, bg, border }) {
     return () => clearTimeout(delay);
   }, []);
 
-  // Keep in sync after animation
   useEffect(() => { if (done) setDisplayed(days); }, [days, done]);
 
   return (
@@ -200,8 +202,7 @@ function CdPill({ label, date, days, color, bg, border }) {
         <div style={{ fontSize:13, fontWeight:800, color, fontFamily:"'Syne',sans-serif" }}>{date}</div>
       </div>
       <div style={{ textAlign:"right" }}>
-        <div style={{ fontSize:22, fontWeight:800, color, fontFamily:"'Syne',sans-serif", lineHeight:1, transition:"color .1s",
-          opacity: done ? 1 : 0.85 }}>{displayed}</div>
+        <div style={{ fontSize:22, fontWeight:800, color, fontFamily:"'Syne',sans-serif", lineHeight:1, opacity: done ? 1 : 0.85 }}>{displayed}</div>
         <div style={{ fontSize:10, color, fontFamily:"'Inter',sans-serif", opacity:0.7 }}>zile</div>
       </div>
     </div>
@@ -231,7 +232,7 @@ function BottomNav({ view, setView }) {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
-function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedChapters, setOpen }) {
+function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedChapters, setOpen, user }) {
   const curWeek = WEEKS.find(w => getWeekStatus(w) === "current");
   const quip = getQuip(doneAll(), totalAll());
 
@@ -242,7 +243,7 @@ function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedC
         <div style={S.heroTop}>
           <Ring pct={pct} size={124} />
           <div style={S.heroInfo}>
-            <div style={S.heroGreet}>Bună, Ari! 👋</div>
+            <div style={S.heroGreet}>Bună, {user?.name?.split(" ")[0] || ""}! 👋</div>
             <div style={S.heroQuip}>{quip}</div>
             <div style={S.heroStats}>{doneAll()} din {totalAll()} capitole bifate</div>
           </div>
