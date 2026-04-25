@@ -19,6 +19,11 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const [tab, setTab]           = useState("content");   // content|chat|quiz|screenshot
   const [cloudLoaded, setCloudLoaded] = useState(false);
 
+  // Keep savedRef in sync with saved state
+
+  // Sync savedRef with saved state
+  useEffect(() => { savedRef.current = saved; }, [saved]);
+
   // Log chapter opened + load from cloud
   useEffect(() => {
     logger.chapterOpened(chapter, subject);
@@ -39,6 +44,9 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     });
   }, [userId]);
   const [saved, setSaved]       = useState(() => ls.get(storageKey) || {});
+  // savedRef — always holds latest saved, defined early to avoid TDZ
+  const savedRef = useRef(ls.get(storageKey) || {});
+  // savedRef must be declared early — used in cloudGet callback and persist
 
   // content
   const [content, setContent]   = useState(saved.content || "");
@@ -70,11 +78,6 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const quizPassed    = quizResult?.passed || saved.quizResult?.passed;
   const hasScreenshot = screenshots.length > 0 || (savedRef.current?.screenshots?.length > 0) || !!savedRef.current?.screenshot;
   const isUnlocked    = quizPassed && hasScreenshot;
-
-  // Persist all state
-  // Ref always holds latest saved — avoids stale closure bug
-  const savedRef = useRef(saved);
-  useEffect(() => { savedRef.current = saved; }, [saved]);
 
   function persist(patch) {
     const updated = { ...savedRef.current, ...patch };
