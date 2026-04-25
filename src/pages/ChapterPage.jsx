@@ -37,12 +37,17 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
   const [evaluating, setEvaluating] = useState(false);
 
   // screenshot
-  const [screenshot, setScreenshot] = useState(saved.screenshot || null);
+  // screenshots is an array — supports multiple uploads
+  const [screenshots, setScreenshots] = useState(() => {
+    if (saved.screenshots) return saved.screenshots; // new format
+    if (saved.screenshot)  return [saved.screenshot]; // migrate old single
+    return [];
+  });
   const fileRef = useRef();
 
   // unlock status
   const quizPassed    = quizResult?.passed || saved.quizResult?.passed;
-  const hasScreenshot = !!screenshot || !!saved.screenshot;
+  const hasScreenshot = screenshots.length > 0 || (savedRef.current?.screenshots?.length > 0) || !!savedRef.current?.screenshot;
   const isUnlocked    = quizPassed && hasScreenshot;
 
   // Use ref so persist always has latest saved value (avoids stale closure bug)
@@ -156,19 +161,27 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
 
   // ── Screenshot ──────────────────────────────────────────────────────────────
   function handleFile(e) {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const img = ev.target.result;
-      setScreenshot(img);
-      persist({ screenshot: img });
-      logger.screenshotUploaded(chapter, subject);
-      recordScreenshot();
-      // check quiz from ref (catches quizzes done in previous sessions)
-      const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
-      if (quizPassedNow) onUnlock(chapterId);
-    };
-    reader.readAsDataURL(file);
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    // Read all selected files
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = ev.target.result;
+        setScreenshots(prev => {
+          const updated = [...prev, img];
+          persist({ screenshots: updated, screenshot: updated[0] }); // keep screenshot for backward compat
+          return updated;
+        });
+        logger.screenshotUploaded(chapter, subject);
+        recordScreenshot();
+        const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
+        if (quizPassedNow) onUnlock(chapterId);
+      };
+      reader.readAsDataURL(file);
+    });
+    // Reset input so same file can be selected again
+    e.target.value = "";
   }
 
   // ── TABS config ─────────────────────────────────────────────────────────────
@@ -425,7 +438,7 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
                     </div>
                 }
               </div>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFile} />
+              <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleFile} />
 
               {screenshot && (
                 <div style={{ marginTop: 12 }}>

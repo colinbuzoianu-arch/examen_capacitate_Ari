@@ -30,7 +30,12 @@ export default function AdminApp({ onLogout }) {
   const allScreenshots = [];
   [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].forEach(ch => {
     const data = ls.get(`chapter_${ch.id}`);
-    if (data?.screenshot) allScreenshots.push({ ...ch, screenshot: data.screenshot, quizResult: data.quizResult });
+    if (!data) return;
+    // Support both new screenshots[] and old screenshot
+    const imgs = data.screenshots || (data.screenshot ? [data.screenshot] : []);
+    imgs.forEach((img, i) => {
+      allScreenshots.push({ ...ch, screenshot: img, screenshotIndex: i + 1, screenshotTotal: imgs.length, quizResult: data.quizResult });
+    });
   });
 
   async function sendReminder() {
