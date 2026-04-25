@@ -7,7 +7,7 @@ import LogsView from "./LogsView.jsx";
 
 export default function AdminApp({ onLogout }) {
   const [view, setView]           = useState("overview");
-  const [unlockedChapters, setUL] = useState({});
+  const [unlockedChapters, setUL] = useState(() => ls.get('unlocked') || {});
   const [manualMsg, setManualMsg] = useState("");
   const [sending, setSending]     = useState(false);
   const [toast, setToast]         = useState(null);
@@ -231,8 +231,14 @@ export default function AdminApp({ onLogout }) {
 
           {view === "detail" && (
             <>
-              <div style={S.cardTitle}>Toate capitolele</div>
-              <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={S.cardTitle}>Toate capitolele</div>
+                <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Inter',sans-serif" }}>Click pe capitol pentru a-l marca manual</div>
+              </div>
+              <div style={{ background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#7A5C00", fontFamily: "'Inter',sans-serif" }}>
+                ⚠️ Folosește override doar dacă știi că Ari a finalizat capitolul dar apare bug.
+              </div>
+              <div style={{ marginTop: 0 }}>
                 {["romana", "matematica"].map(s => {
                   const sub = SUBJECTS[s]; const accent = s === "romana" ? "#FF8A65" : "#64B5F6";
                   return (
