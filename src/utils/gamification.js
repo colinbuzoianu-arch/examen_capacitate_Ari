@@ -236,7 +236,7 @@ export function resyncBadges() {
     if (!ch) return;
     if (ch.quizResult?.passed) quizzesPassed++;
     if (ch.quizResult?.score === 10) perfectQuizzes++;
-    if (ch.screenshot) screenshots++;
+    if (ch.screenshot || (ch.screenshots && ch.screenshots.length > 0)) screenshots++;
     // Count attempts history too
     if (ch.quizAttempts > 1) {
       // may have had perfect in previous attempt

@@ -41,7 +41,8 @@ export default function StudentApp() {
     allChapters.forEach(ch => {
       if (!recovered[ch.id]) {
         const chapData = ls.get(`chapter_${ch.id}`) || {};
-        if (chapData.quizResult?.passed && chapData.screenshot) {
+        const hasProof = chapData.screenshot || (chapData.screenshots && chapData.screenshots.length > 0);
+        if (chapData.quizResult?.passed && hasProof) {
           recovered[ch.id] = true;
         }
       }
