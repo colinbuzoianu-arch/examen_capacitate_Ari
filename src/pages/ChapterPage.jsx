@@ -175,8 +175,12 @@ export default function ChapterPage({ chapterId, subject, onBack, onUnlock }) {
         });
         logger.screenshotUploaded(chapter, subject);
         recordScreenshot();
+        // Only call onUnlock once — for first screenshot that triggers the condition
         const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
-        if (quizPassedNow) onUnlock(chapterId);
+        if (quizPassedNow && !savedRef.current._unlockCalled) {
+          savedRef.current._unlockCalled = true;
+          onUnlock(chapterId);
+        }
       };
       reader.readAsDataURL(file);
     });
