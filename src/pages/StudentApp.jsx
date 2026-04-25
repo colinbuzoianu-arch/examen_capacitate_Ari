@@ -33,9 +33,31 @@ export default function StudentApp() {
     return cur.id;
   });
 
-  // Load progress from cloud on mount
+  // Load progress from cloud on mount + auto-recover
   useEffect(() => {
-    cloudGet("unlocked").then(val => { if (val) setUL(val); });
+    const allChapters = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters];
+
+    cloudGet("unlocked").then(async (saved) => {
+      let recovered = { ...(saved || {}) };
+      let didRecover = false;
+
+      // Auto-recover: check each chapter's cloud data
+      // If quiz passed + screenshot exist but not in unlocked → add it
+      await Promise.all(allChapters.map(async (ch) => {
+        if (!recovered[ch.id]) {
+          try {
+            const chapData = await cloudGet(`chapter_${ch.id}`);
+            if (chapData?.quizResult?.passed && chapData?.screenshot) {
+              recovered[ch.id] = true;
+              didRecover = true;
+            }
+          } catch {}
+        }
+      }));
+
+      if (didRecover) cloudSet("unlocked", recovered);
+      setUL(recovered);
+    });
   }, [user?.userId]);
   const [toast, setToast]         = useState(null);
   const [showGam, setShowGam]       = useState(false);

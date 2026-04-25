@@ -24,13 +24,14 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     logger.chapterOpened(chapter, subject);
     cloudGet(cloudKey).then(val => {
       if (val) {
+        savedRef.current = val;
         setSaved(val);
-        if (val.content) setContent(val.content);
+        if (val.content)     setContent(val.content);
         if (val.chatHistory) setChatHistory(val.chatHistory);
-        if (val.quiz) setQuiz(val.quiz);
+        if (val.quiz)        setQuiz(val.quiz);
         if (val.quizAnswers) setAnswers(val.quizAnswers);
-        if (val.quizResult) setQuizResult(val.quizResult);
-        if (val.screenshot) setScreenshot(val.screenshot);
+        if (val.quizResult)  setQuizResult(val.quizResult);
+        if (val.screenshot)  setScreenshot(val.screenshot);
       }
       setCloudLoaded(true);
     });
@@ -60,13 +61,18 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const fileRef = useRef();
 
   // unlock status
-  const quizPassed    = quizResult?.passed;
-  const hasScreenshot = !!screenshot;
+  const quizPassed    = quizResult?.passed || saved.quizResult?.passed;
+  const hasScreenshot = !!screenshot || !!saved.screenshot;
   const isUnlocked    = quizPassed && hasScreenshot;
 
   // Persist all state
+  // Ref always holds latest saved — avoids stale closure bug
+  const savedRef = useRef(saved);
+  useEffect(() => { savedRef.current = saved; }, [saved]);
+
   function persist(patch) {
-    const updated = { ...saved, ...patch };
+    const updated = { ...savedRef.current, ...patch };
+    savedRef.current = updated;
     setSaved(updated);
     ls.set(storageKey, updated); // local cache
     cloudSet(cloudKey, updated); // cloud sync
@@ -150,14 +156,14 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     try {
       const result = await evaluateQuiz(chapter, quiz.questions, answers, user?.name?.split(" ")[0] || "tu");
       setQuizResult(result);
-      persist({ quizResult: result });
-      const attemptNum = (saved.quizAttempts || 0) + 1;
-      persist({ quizAttempts: attemptNum });
+      const attemptNum = (savedRef.current.quizAttempts || 0) + 1;
+      persist({ quizResult: result, quizAttempts: attemptNum });
       logger.quizSubmitted(chapter, subject, result.score, result.passed, answers, quiz.questions, attemptNum);
       recordQuizAttempt(result.score, result.passed);
       if (result.passed) {
         // check if we can unlock
-        if (hasScreenshot) { onUnlock(chapterId); }
+        const screenshotExists = !!savedRef.current.screenshot || hasScreenshot;
+        if (screenshotExists) { onUnlock(chapterId); }
       }
     } catch {
       alert("Eroare la evaluare. Încearcă din nou.");
@@ -180,7 +186,8 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       persist({ screenshot: img });
       logger.screenshotUploaded(chapter, subject);
       recordScreenshot();
-      if (quizPassed) onUnlock(chapterId);
+      const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
+      if (quizPassedNow) onUnlock(chapterId);
     };
     reader.readAsDataURL(file);
   }
