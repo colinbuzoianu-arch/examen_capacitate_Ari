@@ -6,7 +6,7 @@ import { logger } from "../utils/logger.js";
 import { chapterUnlockEmailHtml } from "../utils/emailTemplates.js";
 import ChapterPage from "./ChapterPage.jsx";
 import GamificationWidget from "./GamificationWidget.jsx";
-import { getGamState, getLevel, getLevelProgress, recordChapterUnlock, BADGES } from "../utils/gamification.js";
+import { getGamState, getLevel, getLevelProgress, recordChapterUnlock, BADGES, resyncBadges } from "../utils/gamification.js";
 
 // ── Motivational quips ────────────────────────────────────────────────────────
 function getQuip(done, total) {
@@ -57,7 +57,7 @@ export default function StudentApp() {
   });
   const [toast, setToast]         = useState(null);
   const [showGam, setShowGam]       = useState(false);
-  const [gamState, setGamState]     = useState(() => getGamState());
+  const [gamState, setGamState]     = useState(() => resyncBadges() || getGamState());
 
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3200); }
 
