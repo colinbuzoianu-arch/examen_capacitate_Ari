@@ -98,7 +98,7 @@ export default function AdminApp({ onLogout }) {
     <div style={S.shell}>
       <header style={S.header}>
         <div>
-          <div style={S.logo}>Panou Tata 👨‍💼</div>
+          <div style={S.logo}>Panou Admin 👨‍💼</div>
           <div style={S.logoSub}>Panou administrare · EN 2026</div>
         </div>
         <button style={S.logoutBtn} onClick={onLogout}>← Ieșire</button>
