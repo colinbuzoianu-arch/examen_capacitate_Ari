@@ -31,7 +31,9 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
         if (val.quiz)        setQuiz(val.quiz);
         if (val.quizAnswers) setAnswers(val.quizAnswers);
         if (val.quizResult)  setQuizResult(val.quizResult);
-        if (val.screenshot)  setScreenshot(val.screenshot);
+        if (val.screenshots) setScreenshots(val.screenshots);
+        else if (val.screenshot) setScreenshots([val.screenshot]);
+        savedRef.current = val;
       }
       setCloudLoaded(true);
     });
@@ -57,12 +59,16 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const [evaluating, setEvaluating] = useState(false);
 
   // screenshot
-  const [screenshot, setScreenshot] = useState(saved.screenshot || null);
+  const [screenshots, setScreenshots] = useState(() => {
+    if (saved.screenshots) return saved.screenshots;
+    if (saved.screenshot)  return [saved.screenshot];
+    return [];
+  });
   const fileRef = useRef();
 
   // unlock status
   const quizPassed    = quizResult?.passed || saved.quizResult?.passed;
-  const hasScreenshot = !!screenshot || !!saved.screenshot;
+  const hasScreenshot = screenshots.length > 0 || (savedRef.current?.screenshots?.length > 0) || !!savedRef.current?.screenshot;
   const isUnlocked    = quizPassed && hasScreenshot;
 
   // Persist all state
@@ -178,18 +184,28 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
 
   // ── Screenshot ──────────────────────────────────────────────────────────────
   function handleFile(e) {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const img = ev.target.result;
-      setScreenshot(img);
-      persist({ screenshot: img });
-      logger.screenshotUploaded(chapter, subject);
-      recordScreenshot();
-      const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
-      if (quizPassedNow) onUnlock(chapterId);
-    };
-    reader.readAsDataURL(file);
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = ev.target.result;
+        setScreenshots(prev => {
+          const updated = [...prev, img];
+          persist({ screenshots: updated, screenshot: updated[0] });
+          return updated;
+        });
+        logger.screenshotUploaded(chapter, subject);
+        recordScreenshot();
+        const quizPassedNow = quizPassed || savedRef.current.quizResult?.passed;
+        if (quizPassedNow && !savedRef.current._unlockCalled) {
+          savedRef.current._unlockCalled = true;
+          onUnlock(chapterId);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
   }
 
   // ── TABS config ─────────────────────────────────────────────────────────────
@@ -436,21 +452,38 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                 </div>
               )}
 
-              <div style={{ ...S.dropZone, borderColor: screenshot ? "#2E7D32" : "#D5D0C8" }}
+              <div style={{ ...S.dropZone, borderColor: screenshots.length > 0 ? "#2E7D32" : "#D5D0C8", minHeight: 90 }}
                 onClick={() => fileRef.current?.click()}>
-                {screenshot
-                  ? <img src={screenshot} alt="screenshot" style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 8 }} />
-                  : <div style={{ textAlign: "center", color: "#444" }}>
-                      <div style={{ fontSize: 40 }}>📷</div>
-                      <div style={{ fontSize: 13 }}>Apasă pentru a alege o poză sau screenshot</div>
-                    </div>
-                }
+                <div style={{ textAlign: "center", color: "#AAA" }}>
+                  <div style={{ fontSize: 32 }}>📷</div>
+                  <div style={{ fontSize: 13, color: "#888" }}>
+                    {screenshots.length > 0 ? `${screenshots.length} poze — apasă pentru a adăuga` : "Apasă pentru a alege poze sau screenshots"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#BBB", marginTop: 4 }}>Poți selecta mai multe poze deodată</div>
+                </div>
               </div>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFile} />
+              <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleFile} />
 
-              {screenshot && (
+              {screenshots.length > 0 && (
                 <div style={{ marginTop: 12 }}>
-                  <button style={S.btnGray} onClick={() => fileRef.current?.click()}>🔄 Schimbă poza</button>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8, fontFamily: "'Inter',sans-serif" }}>
+                    📸 {screenshots.length} {screenshots.length === 1 ? "poză încărcată" : "poze încărcate"}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
+                    {screenshots.map((img, i) => (
+                      <div key={i} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: "1px solid #E0DBD0" }}>
+                        <img src={img} alt={`screenshot ${i+1}`} style={{ width: "100%", height: 90, objectFit: "cover", display: "block" }} />
+                        <button onClick={() => {
+                            const updated = screenshots.filter((_, idx) => idx !== i);
+                            setScreenshots(updated);
+                            persist({ screenshots: updated, screenshot: updated[0] || null });
+                          }}
+                          style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.6)", color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: 11, lineHeight: 1 }}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

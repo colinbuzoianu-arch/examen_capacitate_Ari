@@ -44,7 +44,11 @@ export default function AdminApp({ onLogout }) {
   const allScreenshots = [];
   [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].forEach(ch => {
     const data = ls.get(`chapter_${ch.id}`);
-    if (data?.screenshot) allScreenshots.push({ ...ch, screenshot: data.screenshot, quizResult: data.quizResult });
+    if (!data) return;
+    const imgs = data.screenshots || (data.screenshot ? [data.screenshot] : []);
+    imgs.forEach((img, i) => {
+      allScreenshots.push({ ...ch, screenshot: img, screenshotIndex: i + 1, screenshotTotal: imgs.length, quizResult: data.quizResult });
+    });
   });
 
   async function sendReminder() {
@@ -248,8 +252,14 @@ export default function AdminApp({ onLogout }) {
 
           {view === "detail" && (
             <>
-              <div style={S.cardTitle}>Toate capitolele</div>
-              <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={S.cardTitle}>Toate capitolele</div>
+                <div style={{ fontSize: 11, color: "#AAA" }}>Override manual dacă e bug</div>
+              </div>
+              <div style={{ background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 10, padding: "9px 14px", marginBottom: 12, fontSize: 12, color: "#7A5C00", fontFamily: "'Inter',sans-serif" }}>
+                ⚠️ Bifează manual doar dacă știi că elevul a finalizat capitolul dar apare bug.
+              </div>
+              <div style={{ marginTop: 0 }}>
                 {["romana", "matematica"].map(s => {
                   const sub = SUBJECTS[s]; const accent = s === "romana" ? "#FF8A65" : "#64B5F6";
                   return (
@@ -266,10 +276,32 @@ export default function AdminApp({ onLogout }) {
                               <div style={{ fontSize: 12, fontWeight: 600, color: isDone ? "#52A852" : "#333", fontFamily: "'Inter',sans-serif" }}>{ch.title}</div>
                               <div style={{ fontSize: 10, color: "#999" }}>{wk?.label}</div>
                             </div>
-                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                              {[["Lecție", !!data.content], [`Quiz ${data.quizResult?.score || "—"}/10`, data.quizResult?.passed], ["📸", !!data.screenshot]].map(([label, done]) => (
+                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
+                              {[["Lecție", !!data.content], [`Quiz ${data.quizResult?.score || "—"}/10`, data.quizResult?.passed], ["📸", !!(data.screenshot || (data.screenshots && data.screenshots.length > 0))]].map(([label, done]) => (
                                 <span key={label} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 6, background: done ? "#EAF5EA" : "#F0EDE6", color: done ? "#52A852" : "#BBB", border: `1px solid ${done ? "#C8E6C9" : "#E8E4DC"}`, fontFamily: "'Inter',sans-serif" }}>{label}</span>
                               ))}
+                              {!isDone ? (
+                                <button onClick={() => {
+                                  const cur = ls.get("unlocked") || {};
+                                  const upd = { ...cur, [ch.id]: true };
+                                  ls.set("unlocked", upd);
+                                  setUL(upd);
+                                  showToast(`✅ ${ch.title} bifat manual`);
+                                }} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#1A1A1A", color: "#fff", border: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
+                                  + Bifează
+                                </button>
+                              ) : (
+                                <button onClick={() => {
+                                  const cur = ls.get("unlocked") || {};
+                                  const upd = { ...cur };
+                                  delete upd[ch.id];
+                                  ls.set("unlocked", upd);
+                                  setUL(upd);
+                                  showToast(`↩️ ${ch.title} anulat`);
+                                }} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, background: "#FFF0EE", color: "#C62828", border: "1px solid #FFCDD2", cursor: "pointer", fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
+                                  Anulează
+                                </button>
+                              )}
                             </div>
                           </div>
                         );

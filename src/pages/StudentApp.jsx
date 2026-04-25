@@ -47,7 +47,8 @@ export default function StudentApp() {
         if (!recovered[ch.id]) {
           try {
             const chapData = await cloudGet(`chapter_${ch.id}`);
-            if (chapData?.quizResult?.passed && chapData?.screenshot) {
+            const hasProof = chapData?.screenshot || (chapData?.screenshots && chapData.screenshots.length > 0);
+            if (chapData?.quizResult?.passed && hasProof) {
               recovered[ch.id] = true;
               didRecover = true;
             }
@@ -66,8 +67,12 @@ export default function StudentApp() {
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3200); }
 
   function handleUnlock(chapterId) {
+    let saved;
+    setUL(prev => {
+      saved = { ...prev, [chapterId]: true };
+      return saved;
+    });
     const updated = { ...unlockedChapters, [chapterId]: true };
-    setUL(updated);
     cloudSet("unlocked", updated);
     logger.chapterUnlocked({ id: chapterId, title: chapterId }, "unknown");
     // Record gamification

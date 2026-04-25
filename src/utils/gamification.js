@@ -207,16 +207,19 @@ export function recordChatMessage() {
 }
 
 export function recordQuizAttempt(score, passed) {
+  // Update counts first, then add XP with the already-updated state
   let state = getGamState();
   if (passed) state.quizzesPassed = (state.quizzesPassed || 0) + 1;
   if (score === 10) state.perfectQuizzes = (state.perfectQuizzes || 0) + 1;
   saveGamState(state);
+  // Now add XP — addXP will re-read state and see updated counts for badge check
   if (score === 10) return addXP(XP.QUIZ_PERFECT, `Quiz PERFECT 10/10! 💎`);
   if (passed)       return addXP(XP.QUIZ_PASS,    `Quiz trecut ${score}/10 🧠`);
   return addXP(XP.QUIZ_ATTEMPT, `Quiz încercat ${score}/10`);
 }
 
 // Re-sync badges from actual chapter data in localStorage
+// Called on app load to fix any badges that were missed
 export function resyncBadges() {
   const P = "en2026_";
   const ls = (k) => { try { const v = localStorage.getItem(P+k); return v ? JSON.parse(v) : null; } catch { return null; } };
@@ -224,6 +227,7 @@ export function resyncBadges() {
   let state = getGamState();
   let changed = false;
 
+  // Count quizzes from chapter data
   const allIds = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
   let quizzesPassed = 0, perfectQuizzes = 0, screenshots = 0;
 
@@ -232,7 +236,11 @@ export function resyncBadges() {
     if (!ch) return;
     if (ch.quizResult?.passed) quizzesPassed++;
     if (ch.quizResult?.score === 10) perfectQuizzes++;
-    if (ch.screenshot) screenshots++;
+    if (ch.screenshot || (ch.screenshots && ch.screenshots.length > 0)) screenshots++;
+    // Count attempts history too
+    if (ch.quizAttempts > 1) {
+      // may have had perfect in previous attempt
+    }
   });
 
   if (quizzesPassed > (state.quizzesPassed || 0)) { state.quizzesPassed = quizzesPassed; changed = true; }
@@ -241,13 +249,16 @@ export function resyncBadges() {
 
   if (!changed) return state;
 
+  // Re-check all badges with corrected counts
   const newlyUnlocked = BADGES.filter(b =>
     !state.unlockedBadges.includes(b.id) && b.condition(state)
   );
   for (const badge of newlyUnlocked) {
     state.unlockedBadges = [...(state.unlockedBadges || []), badge.id];
     state.newBadges = [...(state.newBadges || []), badge.id];
-    if (badge.xpReward > 0) state.totalXP = (state.totalXP || 0) + badge.xpReward;
+    if (badge.xpReward > 0) {
+      state.totalXP = (state.totalXP || 0) + badge.xpReward;
+    }
   }
 
   saveGamState(state);
