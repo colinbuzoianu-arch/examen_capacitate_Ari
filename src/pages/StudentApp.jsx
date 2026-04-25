@@ -25,21 +25,30 @@ export default function StudentApp() {
   const [view, setView]             = useState("dashboard");
   const [openChapter, setOpen]      = useState(null);
   const [unlockedChapters, setUL]   = useState(() => {
-    const saved = ls.get("unlocked") || {};
-    // Auto-recover: check all chapters whose quiz+screenshot are done but not in unlocked
+    // Start from unlocked key
+    let recovered = { ...(ls.get("unlocked") || {}) };
+
+    // Migration: old app used "progress" key with { r1: { done: true } }
+    const oldProgress = ls.get("progress") || {};
+    Object.entries(oldProgress).forEach(([id, val]) => {
+      if (val?.done && !recovered[id]) {
+        recovered[id] = true;
+      }
+    });
+
+    // Auto-recover: any chapter with quiz passed + screenshot = unlock it
     const allChapters = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters];
-    let recovered = { ...saved };
-    let didRecover = false;
     allChapters.forEach(ch => {
       if (!recovered[ch.id]) {
         const chapData = ls.get(`chapter_${ch.id}`) || {};
         if (chapData.quizResult?.passed && chapData.screenshot) {
           recovered[ch.id] = true;
-          didRecover = true;
         }
       }
     });
-    if (didRecover) ls.set("unlocked", recovered);
+
+    // Save merged result
+    ls.set("unlocked", recovered);
     return recovered;
   });
   const [activeWeek, setActiveWeek] = useState(() => {
