@@ -211,10 +211,47 @@ export function recordQuizAttempt(score, passed) {
   if (passed) state.quizzesPassed = (state.quizzesPassed || 0) + 1;
   if (score === 10) state.perfectQuizzes = (state.perfectQuizzes || 0) + 1;
   saveGamState(state);
-
   if (score === 10) return addXP(XP.QUIZ_PERFECT, `Quiz PERFECT 10/10! 💎`);
   if (passed)       return addXP(XP.QUIZ_PASS,    `Quiz trecut ${score}/10 🧠`);
   return addXP(XP.QUIZ_ATTEMPT, `Quiz încercat ${score}/10`);
+}
+
+// Re-sync badges from actual chapter data in localStorage
+export function resyncBadges() {
+  const P = "en2026_";
+  const ls = (k) => { try { const v = localStorage.getItem(P+k); return v ? JSON.parse(v) : null; } catch { return null; } };
+
+  let state = getGamState();
+  let changed = false;
+
+  const allIds = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
+  let quizzesPassed = 0, perfectQuizzes = 0, screenshots = 0;
+
+  allIds.forEach(id => {
+    const ch = ls(`chapter_${id}`);
+    if (!ch) return;
+    if (ch.quizResult?.passed) quizzesPassed++;
+    if (ch.quizResult?.score === 10) perfectQuizzes++;
+    if (ch.screenshot) screenshots++;
+  });
+
+  if (quizzesPassed > (state.quizzesPassed || 0)) { state.quizzesPassed = quizzesPassed; changed = true; }
+  if (perfectQuizzes > (state.perfectQuizzes || 0)) { state.perfectQuizzes = perfectQuizzes; changed = true; }
+  if (screenshots > (state.screenshots || 0)) { state.screenshots = screenshots; changed = true; }
+
+  if (!changed) return state;
+
+  const newlyUnlocked = BADGES.filter(b =>
+    !state.unlockedBadges.includes(b.id) && b.condition(state)
+  );
+  for (const badge of newlyUnlocked) {
+    state.unlockedBadges = [...(state.unlockedBadges || []), badge.id];
+    state.newBadges = [...(state.newBadges || []), badge.id];
+    if (badge.xpReward > 0) state.totalXP = (state.totalXP || 0) + badge.xpReward;
+  }
+
+  saveGamState(state);
+  return state;
 }
 
 export function recordScreenshot() {
