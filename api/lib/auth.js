@@ -54,7 +54,21 @@ export async function createUser({ email, password, name }) {
   // Also index by userId for quick lookup
   await redisCmd("SET", `userid:${userId}`, email.toLowerCase());
   // Add to users list
-  await redisCmd("SADD", "users:list", email.toLowerCase());
+  // Handle migration: users:list might be LIST type (old) or SET type (new)
+  // Try SADD first, if it fails (WRONGTYPE), migrate the key
+  try {
+    await redisCmd("SADD", "users:list", email.toLowerCase());
+  } catch (err) {
+    if (err.message?.includes("WRONGTYPE")) {
+      // Migrate: get old list values, delete key, recreate as SET
+      const oldValues = await redisCmd("LRANGE", "users:list", 0, 199).catch(() => []);
+      await redisCmd("DEL", "users:list");
+      const allEmails = [...new Set([...( oldValues || []), email.toLowerCase()])];
+      for (const e of allEmails) {
+        await redisCmd("SADD", "users:list", e);
+      }
+    }
+  }
 
   return user;
 }
