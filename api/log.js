@@ -1,78 +1,65 @@
-// api/log.js — Vercel Serverless Function
-// Receives activity events from Ari's app and stores them in Upstash Redis
-
-import { pushLog, setChapterStat, getChapterStat } from "./lib/redis.js";
+// api/log.js — Activity logging with userId support
+import { redisCmd } from "./lib/redis.js";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { type, payload } = req.body;
-
-  if (!type || !payload) {
-    return res.status(400).json({ error: "Missing type or payload" });
-  }
+  if (!type || !payload) return res.status(400).json({ error: "Missing type or payload" });
 
   const VALID_TYPES = [
-    "chapter_opened",
-    "content_generated",
-    "chat_message",
-    "quiz_started",
-    "quiz_submitted",   // includes failed attempts
-    "screenshot_uploaded",
-    "chapter_unlocked",
+    "chapter_opened", "content_generated", "chat_message",
+    "quiz_started", "quiz_submitted", "screenshot_uploaded", "chapter_unlocked",
   ];
+  if (!VALID_TYPES.includes(type)) return res.status(400).json({ error: "Invalid event type" });
 
-  if (!VALID_TYPES.includes(type)) {
-    return res.status(400).json({ error: "Invalid event type" });
-  }
-
-  // Check Redis is configured — fail loudly so we know
   if (!process.env.ari_KV_REST_API_URL || !process.env.ari_KV_REST_API_TOKEN) {
-    console.error("LOG ERROR: Upstash Redis env vars missing (ari_KV_REST_API_URL / ari_KV_REST_API_TOKEN)");
-    return res.status(500).json({
-      ok: false,
-      error: "Redis not configured — add ari_KV_REST_API_URL and ari_KV_REST_API_TOKEN in Vercel env vars",
-    });
+    return res.status(500).json({ ok: false, error: "Redis not configured" });
   }
 
   try {
-    // Push to daily log — ALL events including failed quiz attempts
-    await pushLog({ type, ...payload });
+    const day = new Date().toISOString().slice(0, 10);
+    const entry = JSON.stringify({ type, ...payload, ts: new Date().toISOString() });
 
-    // For quiz results — accumulate ALL attempts, not just overwrite
-    if (type === "quiz_submitted" && payload.chapterId) {
+    // Push to daily log (all users mixed — for activity feed)
+    await redisCmd("LPUSH", `logs:${day}`, entry);
+    await redisCmd("LTRIM", `logs:${day}`, 0, 999);
+    await redisCmd("EXPIRE", `logs:${day}`, 60 * 60 * 24 * 90);
+
+    // Also push to per-user log if userId present
+    if (payload.userId) {
+      await redisCmd("LPUSH", `ulogs:${payload.userId}:${day}`, entry);
+      await redisCmd("LTRIM", `ulogs:${payload.userId}:${day}`, 0, 199);
+      await redisCmd("EXPIRE", `ulogs:${payload.userId}:${day}`, 60 * 60 * 24 * 90);
+    }
+
+    // For quiz results — accumulate per user
+    if (type === "quiz_submitted" && payload.chapterId && payload.userId) {
+      const statKey = `chapterstat:${payload.userId}:${payload.chapterId}`;
       let existing = null;
-      try { existing = await getChapterStat(payload.chapterId); } catch {}
+      try {
+        const v = await redisCmd("GET", statKey);
+        existing = v ? JSON.parse(v) : null;
+      } catch {}
 
       const allAttempts = [
         ...(existing?.attempts_history || []),
-        {
-          score: payload.score,
-          passed: payload.passed,
-          ts: new Date().toISOString(),
-          answers: payload.answers || [],
-        },
+        { score: payload.score, passed: payload.passed, ts: new Date().toISOString() },
       ];
 
-      await setChapterStat(payload.chapterId, {
-        chapterId:    payload.chapterId,
-        chapterTitle: payload.chapterTitle,
-        subject:      payload.subject,
-        // Latest result
-        score:        payload.score,
-        passed:       payload.passed,
-        // Best score ever
-        bestScore:    Math.max(payload.score, existing?.bestScore || 0),
-        // Total attempts counter
-        totalAttempts: allAttempts.length,
-        lastAttempt:  new Date().toISOString(),
-        // Full history of every attempt
-        attempts_history: allAttempts.slice(-10), // keep last 10
-        // Latest answer breakdown
-        answers: payload.answers || [],
-      });
+      await redisCmd("SET", statKey, JSON.stringify({
+        chapterId:       payload.chapterId,
+        chapterTitle:    payload.chapterTitle,
+        subject:         payload.subject,
+        userId:          payload.userId,
+        score:           payload.score,
+        passed:          payload.passed,
+        bestScore:       Math.max(payload.score, existing?.bestScore || 0),
+        totalAttempts:   allAttempts.length,
+        lastAttempt:     new Date().toISOString(),
+        attempts_history: allAttempts.slice(-10),
+        answers:         payload.answers || [],
+      }));
     }
 
     return res.status(200).json({ ok: true });

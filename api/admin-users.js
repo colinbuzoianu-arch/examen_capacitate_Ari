@@ -1,58 +1,159 @@
-// api/admin-users.js — Admin endpoint: list all users + their progress
-// Protected by ADMIN_SECRET env var
+// api/admin-users.js — Admin endpoints for user management
+// GET /api/admin-users?mode=list          → all users with summary stats
+// GET /api/admin-users?mode=user&uid=X    → full detail for one user
+// GET /api/admin-users?mode=logs&uid=X&day=YYYY-MM-DD → logs for one user
+// POST /api/admin-users?mode=override     → manually set chapter as unlocked
 
 import { getAllUsers } from "./lib/auth.js";
-import { redisCmd, getAllChapterStats } from "./lib/redis.js";
+import { redisCmd } from "./lib/redis.js";
+
+const CHAPTER_IDS = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
+
+function adminAuth(req) {
+  const auth = req.headers.authorization?.replace("Bearer ", "");
+  return auth === process.env.ADMIN_SECRET;
+}
+
+async function getUserData(userId) {
+  const get = async (key) => {
+    try {
+      const val = await redisCmd("GET", `data:${userId}:${key}`);
+      if (!val) return null;
+      return typeof val === "string" ? JSON.parse(val) : val;
+    } catch { return null; }
+  };
+
+  const [unlocked, gamification] = await Promise.all([
+    get("unlocked"),
+    get("gamification"),
+  ]);
+
+  // Load all chapter data
+  const chapters = {};
+  await Promise.all(CHAPTER_IDS.map(async id => {
+    const data = await get(`chapter_${id}`);
+    if (data) chapters[id] = data;
+  }));
+
+  return { unlocked: unlocked || {}, gamification: gamification || {}, chapters };
+}
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+  if (!adminAuth(req)) return res.status(401).json({ error: "Unauthorized" });
 
-  // Admin auth
-  const auth = req.headers.authorization?.replace("Bearer ", "");
-  if (auth !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: "Unauthorized" });
+  const { mode, uid, day } = req.query;
+
+  // ── LIST all users ──────────────────────────────────────────────────────────
+  if (req.method === "GET" && mode === "list") {
+    try {
+      const users = await getAllUsers();
+      const withStats = await Promise.all(users.map(async u => {
+        try {
+          const { unlocked, gamification } = await getUserData(u.userId);
+          return {
+            userId:   u.userId,
+            name:     u.name,
+            email:    u.email,
+            createdAt: u.createdAt,
+            stats: {
+              unlockedChapters: Object.keys(unlocked).length,
+              totalXP:          gamification.totalXP || 0,
+              currentStreak:    gamification.currentStreak || 0,
+              maxStreak:        gamification.maxStreak || 0,
+              quizzesPassed:    gamification.quizzesPassed || 0,
+              perfectQuizzes:   gamification.perfectQuizzes || 0,
+              lastStudyDate:    gamification.lastStudyDate || null,
+              badges:           (gamification.unlockedBadges || []).length,
+            },
+          };
+        } catch {
+          return { userId: u.userId, name: u.name, email: u.email, stats: {} };
+        }
+      }));
+      withStats.sort((a, b) => (b.stats.unlockedChapters || 0) - (a.stats.unlockedChapters || 0));
+      return res.status(200).json({ ok: true, users: withStats });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
 
-  try {
-    const users = await getAllUsers();
+  // ── USER detail ─────────────────────────────────────────────────────────────
+  if (req.method === "GET" && mode === "user" && uid) {
+    try {
+      const { unlocked, gamification, chapters } = await getUserData(uid);
 
-    // For each user, get their progress summary
-    const usersWithProgress = await Promise.all(users.map(async u => {
-      try {
-        const progressVal = await redisCmd("GET", `data:${u.userId}:unlocked`).catch(() => null);
-        const progress = progressVal ? JSON.parse(progressVal) : {};
-        const unlockedCount = Object.keys(progress).length;
-
-        const gamVal = await redisCmd("GET", `data:${u.userId}:gamification`).catch(() => null);
-        const gam = gamVal ? JSON.parse(gamVal) : {};
-
-        const chapterStats = await getAllChapterStats(u.userId).catch(() => ({}));
-        const quizzesPassed = Object.values(chapterStats).filter(s => s.passed).length;
-        const avgScore = Object.values(chapterStats).length > 0
-          ? Math.round(Object.values(chapterStats).reduce((a, s) => a + (s.score || 0), 0) / Object.values(chapterStats).length * 10) / 10
-          : null;
-
+      // Build chapter summary with screenshots
+      const chapterSummary = CHAPTER_IDS.map(id => {
+        const data = chapters[id] || {};
+        const imgs = data.screenshots || (data.screenshot ? [data.screenshot] : []);
         return {
-          ...u,
-          stats: {
-            unlockedChapters: unlockedCount,
-            totalXP: gam.totalXP || 0,
-            currentStreak: gam.currentStreak || 0,
-            quizzesPassed,
-            avgQuizScore: avgScore,
-            lastSeen: gam.lastStudyDate || null,
-          },
+          id,
+          subject: id.startsWith("r") ? "romana" : "matematica",
+          unlocked: !!unlocked[id],
+          hasContent: !!data.content,
+          quizResult: data.quizResult || null,
+          quizAttempts: data.quizAttempts || 0,
+          screenshots: imgs,
+          chatMessages: (data.chatHistory || []).filter(m => m.role === "user").length,
         };
-      } catch {
-        return { ...u, stats: {} };
-      }
-    }));
+      });
 
-    // Sort by progress descending
-    usersWithProgress.sort((a, b) => (b.stats.unlockedChapters || 0) - (a.stats.unlockedChapters || 0));
-
-    return res.status(200).json({ ok: true, users: usersWithProgress });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
+      return res.status(200).json({
+        ok: true,
+        unlocked,
+        gamification,
+        chapters: chapterSummary,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
+
+  // ── USER logs ───────────────────────────────────────────────────────────────
+  if (req.method === "GET" && mode === "logs" && uid) {
+    try {
+      const targetDay = day || new Date().toISOString().slice(0, 10);
+      const raw = await redisCmd("LRANGE", `logs:${targetDay}`, 0, 499);
+      const logs = (raw || [])
+        .map(r => { try { return JSON.parse(r); } catch { return null; } })
+        .filter(Boolean)
+        .filter(l => l.userId === uid); // filter by userId
+      return res.status(200).json({ ok: true, logs, day: targetDay });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── LOG DAYS for a user ─────────────────────────────────────────────────────
+  if (req.method === "GET" && mode === "logdays" && uid) {
+    try {
+      const keys = await redisCmd("KEYS", "logs:*");
+      const days = (keys || []).map(k => k.replace("logs:", "")).sort().reverse().slice(0, 30);
+      return res.status(200).json({ ok: true, days });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── OVERRIDE chapter ────────────────────────────────────────────────────────
+  if (req.method === "POST" && mode === "override") {
+    const { userId, chapterId, value } = req.body || {};
+    if (!userId || !chapterId) return res.status(400).json({ error: "Missing userId or chapterId" });
+    try {
+      const key = `data:${userId}:unlocked`;
+      const current = await redisCmd("GET", key).catch(() => null);
+      const unlocked = current ? JSON.parse(current) : {};
+      if (value === false) {
+        delete unlocked[chapterId];
+      } else {
+        unlocked[chapterId] = true;
+      }
+      await redisCmd("SET", key, JSON.stringify(unlocked));
+      return res.status(200).json({ ok: true, unlocked });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  return res.status(400).json({ error: "Unknown mode" });
 }

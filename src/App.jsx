@@ -17,7 +17,7 @@ function AppInner() {
 
   // Sync token to cloudStorage + set logger user
   useEffect(() => { setAuthToken(token); }, [token]);
-  useEffect(() => { if (user?.name) setLoggerUser(user.name); }, [user]);
+  useEffect(() => { if (user?.name) setLoggerUser(user.name, user.userId); }, [user]);
 
   // Check admin session
   useEffect(() => {
