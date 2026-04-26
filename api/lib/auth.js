@@ -54,18 +54,40 @@ export async function createUser({ email, password, name }) {
   // Also index by userId for quick lookup
   await redisCmd("SET", `userid:${userId}`, email.toLowerCase());
   // Add to users list
-  await redisCmd("LPUSH", "users:list", email.toLowerCase());
+  await redisCmd("SADD", "users:list", email.toLowerCase());
 
   return user;
 }
 
 export async function getAllUsers() {
-  const emails = await redisCmd("LRANGE", "users:list", 0, 199);
-  if (!emails || !Array.isArray(emails)) return [];
+  let emails = [];
+
+  // Try SMEMBERS first (new format - Set)
+  try {
+    const members = await redisCmd("SMEMBERS", "users:list");
+    if (Array.isArray(members) && members.length > 0) {
+      emails = members;
+    }
+  } catch {}
+
+  // Fallback: scan all user:* keys directly
+  if (emails.length === 0) {
+    try {
+      const keys = await redisCmd("KEYS", "user:*");
+      if (Array.isArray(keys)) {
+        emails = keys.map(k => k.replace("user:", "")).filter(e => e.includes("@"));
+      }
+    } catch {}
+  }
+
+  if (emails.length === 0) return [];
+
   const users = [];
-  for (const email of emails) {
-    const u = await getUserByEmail(email);
-    if (u) users.push({ ...u, passwordHash: undefined, passwordSalt: undefined });
+  for (const email of [...new Set(emails)]) { // deduplicate
+    try {
+      const u = await getUserByEmail(email);
+      if (u) users.push({ ...u, passwordHash: undefined, passwordSalt: undefined });
+    } catch {}
   }
   return users;
 }
