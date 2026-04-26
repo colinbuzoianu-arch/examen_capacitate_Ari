@@ -1,4 +1,8 @@
 // api/progress.js — Sync user progress to/from Redis
+
+export const config = {
+  api: { bodyParser: { sizeLimit: "10mb" } },
+};
 // GET  /api/progress         → load progress for authenticated user
 // POST /api/progress         → save progress for authenticated user
 
