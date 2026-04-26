@@ -157,5 +157,48 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── DEBUG (replaces admin-debug.js) ───────────────────────────────────────
+  if (req.method === "GET" && mode === "debug") {
+    try {
+      let usersList = null;
+      try { usersList = await redisCmd("SMEMBERS", "users:list"); } catch {}
+      const userKeys = await redisCmd("KEYS", "user:*").catch(() => []);
+      const dataKeys = await redisCmd("KEYS", "data:*").catch(() => []);
+      return res.status(200).json({
+        ok: true,
+        usersListValue: usersList,
+        userKeysFound: userKeys,
+        dataKeysFound: dataKeys?.slice(0, 20),
+        redisUrl: process.env.ari_KV_REST_API_URL ? "✅ set" : "❌ missing",
+        adminSecret: process.env.ADMIN_SECRET ? "✅ set" : "❌ missing",
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── LOGS (replaces get-logs.js) ────────────────────────────────────────────
+  if (req.method === "GET" && mode === "all-logs") {
+    try {
+      const { day } = req.query;
+      const targetDay = day || new Date().toISOString().slice(0, 10);
+      const raw = await redisCmd("LRANGE", `logs:${targetDay}`, 0, 499);
+      const logs = (raw || []).map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+      return res.status(200).json({ ok: true, logs, day: targetDay });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  if (req.method === "GET" && mode === "log-days") {
+    try {
+      const keys = await redisCmd("KEYS", "logs:*").catch(() => []);
+      const days = (keys || []).map(k => k.replace("logs:", "")).sort().reverse().slice(0, 30);
+      return res.status(200).json({ ok: true, days });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   return res.status(400).json({ error: "Unknown mode" });
 }

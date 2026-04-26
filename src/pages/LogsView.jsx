@@ -28,13 +28,23 @@ export default function LogsView() {
   const [tab, setTab]           = useState("feed"); // feed | quiz | chat
 
   async function apiFetch(params) {
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(`/api/get-logs?${qs}`);
+    // Map old modes to new admin-users endpoint modes
+    const modeMap = { days: "log-days", stats: "all-logs" };
+    const mapped = { ...params };
+    if (mapped.mode && modeMap[mapped.mode]) mapped.mode = modeMap[mapped.mode];
+    else if (!mapped.mode) mapped.mode = "all-logs";
+    const qs = new URLSearchParams(mapped).toString();
+    const res = await fetch(`/api/admin-users?${qs}`, {
+      headers: { Authorization: `Bearer ${btoa("Babel2012")}` },
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${res.status}`);
     }
-    return res.json();
+    const data = await res.json();
+    // Remap response keys for compatibility
+    if (mapped.mode === "log-days") return { days: data.days || [] };
+    return data;
   }
 
   // Load available days on mount
