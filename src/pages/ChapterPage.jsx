@@ -5,6 +5,7 @@ import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } fro
 import { SUBJECTS, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import UpgradeModal from "./UpgradeModal.jsx";
 import { recordContentRead, recordChatMessage, recordQuizAttempt, recordScreenshot } from "../utils/gamification.js";
 
 export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlock }) {
@@ -100,8 +101,12 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       persist({ content: text });
       logger.contentGenerated(chapter, subject);
       recordContentRead();
-    } catch {
-      setContent("❌ Nu s-a putut genera lecția. Verifică conexiunea și încearcă din nou.");
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) {
+        setUpgradeModal("lesson");
+      } else {
+        setContent("❌ Nu s-a putut genera lecția. Verifică conexiunea și încearcă din nou.");
+      }
     }
     setLC(false);
   }
@@ -120,8 +125,13 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       persist({ chatHistory: full });
       logger.chatMessage(chapter, subject, msg, reply);
       recordChatMessage();
-    } catch {
-      setChatHistory([...newHistory, { role: "assistant", content: "❌ Eroare. Încearcă din nou." }]);
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) {
+        setChatHistory(newHistory); // Remove the pending user message
+        setUpgradeModal("chat");
+      } else {
+        setChatHistory([...newHistory, { role: "assistant", content: "❌ Eroare. Încearcă din nou." }]);
+      }
     }
     setLoadingChat(false);
   }
@@ -137,7 +147,11 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       setQuizResult(null);
       persist({ quiz: q, quizAnswers: {}, quizResult: null });
     } catch (e) {
-      setQuizError(e.message || "Eroare la generarea quiz-ului.");
+      if (e.message?.startsWith("LIMIT_REACHED:")) {
+        setUpgradeModal("quiz");
+      } else {
+        setQuizError(e.message || "Eroare la generarea quiz-ului.");
+      }
     }
     setLQ(false);
   }
@@ -517,6 +531,13 @@ function AnimatedLoading({ messages, subtitle }) {
         {subtitle && <div style={{ fontSize: 11, color: "#AAA", marginTop: 6, fontFamily: "'Inter',sans-serif" }}>{subtitle}</div>}
       </div>
     </div>
+    {upgradeModal && (
+        <UpgradeModal
+          limitType={upgradeModal}
+          token={localStorage.getItem("session_token")}
+          onClose={() => setUpgradeModal(null)}
+        />
+      )}
   );
 }
 

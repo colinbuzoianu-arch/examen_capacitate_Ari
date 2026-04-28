@@ -1,14 +1,26 @@
 // All AI calls go through /api/claude (serverless, keeps API key secret)
 
+// ── Auth token helper ─────────────────────────────────────────────────────────
+function getAuthToken() {
+  return localStorage.getItem("session_token") || "";
+}
+
 // ── Core call ────────────────────────────────────────────────────────────────
-async function aiCallOnce(messages, system = "", max_tokens = 2000, fast = false) {
+async function aiCallOnce(messages, system = "", max_tokens = 2000, fast = false, interactionType = "chat") {
+  const token = getAuthToken();
   const res = await fetch("/api/claude", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, system, max_tokens, fast }),
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ messages, system, max_tokens, fast, interactionType }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 429 && err.error === "limit_reached") {
+      throw new Error(`LIMIT_REACHED:${err.message}`);
+    }
     throw new Error(err.error || `HTTP ${res.status}`);
   }
   const data = await res.json();
@@ -18,21 +30,21 @@ async function aiCallOnce(messages, system = "", max_tokens = 2000, fast = false
 }
 
 // Fast call — uses Haiku model, much faster for structured tasks like quiz
-export async function aiCallFast(messages, system = "", max_tokens = 1800) {
-  return aiCallOnce(messages, system, max_tokens, true);
+export async function aiCallFast(messages, system = "", max_tokens = 1800, interactionType = "quiz") {
+  return aiCallOnce(messages, system, max_tokens, true, interactionType);
 }
 
 // Retry wrapper — tries up to `attempts` times with exponential backoff
-export async function aiCall(messages, system = "", max_tokens = 2000, attempts = 3) {
+export async function aiCall(messages, system = "", max_tokens = 2000, attempts = 3, interactionType = "chat") {
   let lastError;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await aiCallOnce(messages, system, max_tokens, false);
+      return await aiCallOnce(messages, system, max_tokens, false, interactionType);
     } catch (err) {
       lastError = err;
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
       console.warn(`aiCall attempt ${i + 1} failed:`, err.message);
       if (i < attempts - 1) {
-        // Wait before retry: 1s, 2s, 4s
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
       }
     }
@@ -41,81 +53,41 @@ export async function aiCall(messages, system = "", max_tokens = 2000, attempts 
 }
 
 // ── Robust JSON extractor ─────────────────────────────────────────────────────
-// Handles cases where Claude wraps JSON in markdown, adds preamble, etc.
 function extractJSON(raw) {
   if (!raw) throw new Error("Empty response");
-
-  // 1. Strip markdown code blocks
   let clean = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-
-  // 2. Try direct parse first
   try { return JSON.parse(clean); } catch {}
-
-  // 3. Find first { and last } — extract the JSON object
   const start = clean.indexOf("{");
   const end   = clean.lastIndexOf("}");
   if (start !== -1 && end !== -1 && end > start) {
     try { return JSON.parse(clean.slice(start, end + 1)); } catch {}
   }
-
-  // 4. Find first [ and last ] — extract JSON array
   const aStart = clean.indexOf("[");
   const aEnd   = clean.lastIndexOf("]");
   if (aStart !== -1 && aEnd !== -1 && aEnd > aStart) {
     try { return JSON.parse(clean.slice(aStart, aEnd + 1)); } catch {}
   }
-
   throw new Error("Could not extract valid JSON from response");
 }
 
 // ── Generate chapter explanation ──────────────────────────────────────────────
 export async function generateChapterContent(chapter) {
-  const system = `Ești un tutore expert pentru elevii de clasa a VIII-a din România care se pregătesc pentru Evaluarea Națională 2026.
-Răspunde ÎNTOTDEAUNA în română. Fii clar, prietenos și adaptat nivelului unui elev de 14 ani.
-Folosește exemple concrete, mnemonice și exerciții scurte. Structurează răspunsul cu titluri clare.`;
+  const system = `Ești un tutore expert pentru elevii de clasa a VIII-a din România care se pregătesc pentru Evaluarea Națională 2026.\nRăspunde ÎNTOTDEAUNA în română. Fii clar, prietenos și adaptat nivelului unui elev de 14 ani.\nFolosește exemple concrete, mnemonice și exerciții scurte. Structurează răspunsul cu titluri clare.`;
 
-  const prompt = `Creează un rezumat educațional complet pentru capitolul: "${chapter.title}".
+  const prompt = `Creează un rezumat educațional complet pentru capitolul: "${chapter.title}".\n\nContext capitol: ${chapter.aiContext}\n\nStructurează astfel:\n## Ce vei învăța\n(2-3 propoziții despre importanța capitolului la EN)\n\n## Concepte cheie\n(explică fiecare concept principal clar și simplu, cu exemple)\n\n## Reguli de reținut\n(bullets cu regulile esențiale, formule, definiții)\n\n## Exemplu rezolvat\n(un exercițiu/problemă tip EN complet rezolvat pas cu pas)\n\n## Greșeli frecvente\n(2-3 greșeli tipice și cum să le eviți)\n\nFii concis dar complet. Maxim 600 cuvinte.`;
 
-Context capitol: ${chapter.aiContext}
-
-Structurează astfel:
-## Ce vei învăța
-(2-3 propoziții despre importanța capitolului la EN)
-
-## Concepte cheie
-(explică fiecare concept principal clar și simplu, cu exemple)
-
-## Reguli de reținut
-(bullets cu regulile esențiale, formule, definiții)
-
-## Exemplu rezolvat
-(un exercițiu/problemă tip EN complet rezolvat pas cu pas)
-
-## Greșeli frecvente
-(2-3 greșeli tipice și cum să le eviți)
-
-Fii concis dar complet. Maxim 600 cuvinte.`;
-
-  return aiCall([{ role: "user", content: prompt }], system, 2000, 3);
+  return aiCall([{ role: "user", content: prompt }], system, 2000, 3, "lesson");
 }
 
 // ── Generate quiz ─────────────────────────────────────────────────────────────
-// Uses claude-haiku for speed (fits in Vercel 10s free tier limit)
 export async function generateQuiz(chapter) {
   const system = `EN VIII examinator. Răspunde DOAR cu JSON valid, fără text extra.`;
 
-  // Compact prompt — fewer tokens = faster response
-  const prompt = `Quiz 10 întrebări pentru "${chapter.title}" (EN VIII România).
-Teme: ${chapter.topics ? chapter.topics.join(", ") : chapter.aiContext.slice(0, 200)}
-
-JSON STRICT (nimic altceva):
-{"questions":[{"id":1,"question":"...","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","explanation":"..."}]}
-
-Reguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație scurtă max 15 cuvinte.`;
+  const prompt = `Quiz 10 întrebări pentru "${chapter.title}" (EN VIII România).\nTeme: ${chapter.topics ? chapter.topics.join(", ") : chapter.aiContext.slice(0, 200)}\n\nJSON STRICT (nimic altceva):\n{"questions":[{"id":1,"question":"...","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","explanation":"..."}]}\n\nReguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație scurtă max 15 cuvinte.`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const raw = await aiCallFast([{ role: "user", content: prompt }], system, 1800);
+      const raw = await aiCallFast([{ role: "user", content: prompt }], system, 1800, "quiz");
       const parsed = extractJSON(raw);
 
       if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length < 5) {
@@ -133,6 +105,7 @@ Reguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație s
 
       return parsed;
     } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
       console.warn(`Quiz attempt ${attempt}/2:`, err.message);
       if (attempt === 2) throw new Error("Nu s-a putut genera quiz-ul. Încearcă din nou.");
       await new Promise(r => setTimeout(r, 1000));
@@ -154,44 +127,22 @@ export async function evaluateQuiz(chapter, questions, answers, userName = "tu")
 
   const score = summary.filter(s => s.corect).length;
 
-  const prompt = `${userName} a terminat quiz-ul la capitolul "${chapter.title}". Scor: ${score}/10.
+  const prompt = `${userName} a terminat quiz-ul la capitolul "${chapter.title}". Scor: ${score}/10.\n\nRăspunsurile lui:\n${JSON.stringify(summary, null, 2)}\n\nScrie un feedback personalizat de 3-4 propoziții:\n1. Felicită-l/felicit-o dacă a trecut (${score >= 8 ? "DA, a trecut" : "NU, nu a trecut"})\n2. Menționează 1-2 greșeli specifice pe care să le revadă\n3. Încurajare pentru continuare\n4. Dacă nu a trecut, spune-i ce capitol să revadă\n\nFii cald, direct și motivant. Maxim 80 cuvinte.`;
 
-Răspunsurile lui:
-${JSON.stringify(summary, null, 2)}
-
-Scrie un feedback personalizat de 3-4 propoziții:
-1. Felicită-l/felicit-o dacă a trecut (${score >= 8 ? "DA, a trecut" : "NU, nu a trecut"})
-2. Menționează 1-2 greșeli specifice pe care să le revadă
-3. Încurajare pentru continuare
-4. Dacă nu a trecut, spune-i ce capitol să revadă
-
-Fii cald, direct și motivant. Maxim 80 cuvinte.`;
-
-  const feedback = await aiCall([{ role: "user", content: prompt }], system, 500, 3);
+  const feedback = await aiCall([{ role: "user", content: prompt }], system, 500, 3, "chat");
   return { score, passed: score >= 8, feedback };
 }
 
 // ── Chapter chat ──────────────────────────────────────────────────────────────
 export async function chatWithTutor(chapter, history, userMessage, userName = "elev") {
-  const system = `Ești tutorele unui elev de clasa a VIII-a care se pregătește pentru Evaluarea Națională 2026.
-Nume elev: ${userName}.
-Îl ajuți să se pregătească pentru Evaluarea Națională 2026.
-Capitolul curent: "${chapter.title}".
-Context: ${chapter.aiContext}
-
-Reguli:
-- Răspunde ÎNTOTDEAUNA în română
-- Fii prietenos, clar, adaptat nivelului de clasa a VIII-a
-- Dacă întreabă ceva în afara capitolului, redirecționează-l blând
-- Dă exemple concrete și practice
-- Maxim 150 cuvinte per răspuns`;
+  const system = `Ești tutorele unui elev de clasa a VIII-a care se pregătește pentru Evaluarea Națională 2026.\nNume elev: ${userName}.\nÎl ajuți să se pregătească pentru Evaluarea Națională 2026.\nCapitolul curent: "${chapter.title}".\nContext: ${chapter.aiContext}\n\nReguli:\n- Răspunde ÎNTOTDEAUNA în română\n- Fii prietenos, clar, adaptat nivelului de clasa a VIII-a\n- Dacă întreabă ceva în afara capitolului, redirecționează-l blând\n- Dă exemple concrete și practice\n- Maxim 150 cuvinte per răspuns`;
 
   const messages = [
     ...history,
     { role: "user", content: userMessage },
   ];
 
-  return aiCall(messages, system, 600, 3);
+  return aiCall(messages, system, 600, 3, "chat");
 }
 
 // ── Email send ────────────────────────────────────────────────────────────────

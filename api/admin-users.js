@@ -200,5 +200,69 @@ export default async function handler(req, res) {
     }
   }
 
+
+  // ── BLOCK / UNBLOCK user ────────────────────────────────────────────────────
+  if (req.method === "POST" && mode === "block") {
+    const { userId, blocked } = req.body || {};
+    if (!userId) return res.status(400).json({ error: "Missing userId" });
+    try {
+      const emailKey = await redisCmd("GET", `userid:${userId}`);
+      if (!emailKey) return res.status(404).json({ error: "User not found" });
+      const userRaw = await redisCmd("GET", `user:${emailKey}`);
+      if (!userRaw) return res.status(404).json({ error: "User data not found" });
+      const user = typeof userRaw === "string" ? JSON.parse(userRaw) : userRaw;
+      user.blocked = !!blocked;
+      user.blockedAt = blocked ? new Date().toISOString() : null;
+      await redisCmd("SET", `user:${emailKey}`, JSON.stringify(user));
+      return res.status(200).json({ ok: true, userId, blocked: !!blocked });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── RESET usage counters ─────────────────────────────────────────────────────
+  if (req.method === "POST" && mode === "reset-usage") {
+    const { userId, type } = req.body || {};
+    if (!userId) return res.status(400).json({ error: "Missing userId" });
+    try {
+      const usageRaw = await redisCmd("GET", `usage:${userId}`);
+      const usage = usageRaw ? (typeof usageRaw === "string" ? JSON.parse(usageRaw) : usageRaw) : { lesson: 0, quiz: 0, chat: 0 };
+      if (type) {
+        usage[type] = 0;
+      } else {
+        usage.lesson = 0; usage.quiz = 0; usage.chat = 0;
+      }
+      await redisCmd("SET", `usage:${userId}`, JSON.stringify(usage));
+      return res.status(200).json({ ok: true, userId, usage });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── GRANT premium access ──────────────────────────────────────────────────────
+  if (req.method === "POST" && mode === "grant-premium") {
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: "Missing userId" });
+    try {
+      const emailKey = await redisCmd("GET", `userid:${userId}`);
+      if (!emailKey) return res.status(404).json({ error: "User not found" });
+      const userRaw = await redisCmd("GET", `user:${emailKey}`);
+      const user = typeof userRaw === "string" ? JSON.parse(userRaw) : userRaw;
+      user.premium = true;
+      user.premiumGrantedAt = new Date().toISOString();
+      user.premiumSource = "admin";
+      await redisCmd("SET", `user:${emailKey}`, JSON.stringify(user));
+      // Reset usage so they start fresh
+      await redisCmd("SET", `usage:${userId}`, JSON.stringify({ lesson: 0, quiz: 0, chat: 0 }));
+      return res.status(200).json({ ok: true, userId, premium: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   return res.status(400).json({ error: "Unknown mode" });
 }
+
+// NOTE: Block/unblock and usage reset are appended below
+// These modes are handled before the final return above in production —
+// we patch them in via the stripe.js and a separate check in admin-users

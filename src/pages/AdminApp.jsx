@@ -42,6 +42,10 @@ export default function AdminApp({ onLogout }) {
   const [lightbox, setLightbox]       = useState(null);
   const [expandedLog, setExpandedLog] = useState({});
 
+  // Usage & management
+  const [userUsage, setUserUsage]     = useState(null);
+  const [mgmtLoading, setMgmtLoading] = useState(false);
+
   function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 3000); }
 
   // Load users list
@@ -61,8 +65,10 @@ export default function AdminApp({ onLogout }) {
     setSelectedUser(u);
     setUserDetail(null);
     setUserLogs([]);
+    setUserUsage(null);
     setDetailLoad(true);
     setView("detail");
+    loadUserUsage(u.userId);
     try {
       const [detail, logs] = await Promise.all([
         apiFetch(`/api/admin-users?mode=user&uid=${u.userId}`),
@@ -81,6 +87,54 @@ export default function AdminApp({ onLogout }) {
       const data = await apiFetch(`/api/admin-users?mode=logs&uid=${selectedUser.userId}&day=${day}`);
       setUserLogs(data.logs || []);
     } catch {}
+  }
+
+  async function loadUserUsage(userId) {
+    try {
+      const data = await apiFetch(`/api/usage?userId=${userId}`);
+      setUserUsage(data.usage || null);
+    } catch { setUserUsage(null); }
+  }
+
+  async function blockUser(userId, blocked) {
+    setMgmtLoading(true);
+    try {
+      await apiFetch("/api/admin-users?mode=block", {
+        method: "POST",
+        body: JSON.stringify({ userId, blocked }),
+      });
+      await loadUsers();
+      showToast(blocked ? "🚫 User blocat" : "✅ User deblocat");
+    } catch { showToast("❌ Eroare"); }
+    setMgmtLoading(false);
+  }
+
+  async function resetUsage(userId) {
+    if (!confirm("Resetezi toate contoarele de interacțiuni AI pentru acest user?")) return;
+    setMgmtLoading(true);
+    try {
+      await apiFetch("/api/admin-users?mode=reset-usage", {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      });
+      await loadUserUsage(userId);
+      showToast("🔄 Contoare resetate");
+    } catch { showToast("❌ Eroare"); }
+    setMgmtLoading(false);
+  }
+
+  async function grantPremium(userId) {
+    if (!confirm("Acorzi acces premium gratuit acestui user?")) return;
+    setMgmtLoading(true);
+    try {
+      await apiFetch("/api/admin-users?mode=grant-premium", {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      });
+      await loadUsers();
+      showToast("⭐ Acces premium acordat");
+    } catch { showToast("❌ Eroare"); }
+    setMgmtLoading(false);
   }
 
   async function overrideChapter(userId, chapterId, value) {
@@ -254,6 +308,66 @@ export default function AdminApp({ onLogout }) {
                   <Kpi label="Streak" value={`${userDetail.gamification?.currentStreak || 0} zile`} icon="🔥" />
                   <Kpi label="Quiz-uri trecute" value={userDetail.gamification?.quizzesPassed || 0} icon="🧠" />
                   <Kpi label="Capitole bifate" value={Object.keys(userDetail.unlocked || {}).length} icon="✅" />
+                </div>
+
+                {/* Management panel */}
+                <div style={{ background: "#F8F6F2", borderRadius: 14, padding: "16px 20px", marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1A1A1A", marginBottom: 12, fontFamily: "'Syne',sans-serif" }}>
+                    ⚙️ Management cont
+                  </div>
+
+                  {/* Usage counters */}
+                  {userUsage && (
+                    <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                      {[["lesson","Lecții","📖"], ["quiz","Quiz-uri","🧠"], ["chat","Chat","💬"]].map(([k, lbl, ico]) => (
+                        <div key={k} style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 12, border: "1px solid #E0DBD0" }}>
+                          {ico} {lbl}: <strong>{userUsage[k] || 0}</strong>
+                          <span style={{ color: "#AAA" }}> /{k === "lesson" ? 15 : k === "quiz" ? 30 : 150}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Status badges */}
+                  <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                    {selectedUser?.blocked && (
+                      <span style={{ background: "#FFF5F5", color: "#C53030", border: "1px solid #FEB2B2", borderRadius: 20, fontSize: 11, fontWeight: 700, padding: "3px 10px" }}>
+                        🚫 BLOCAT
+                      </span>
+                    )}
+                    {selectedUser?.premium && (
+                      <span style={{ background: "#FFFFF0", color: "#744210", border: "1px solid #FAF089", borderRadius: 20, fontSize: 11, fontWeight: 700, padding: "3px 10px" }}>
+                        ⭐ PREMIUM
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => blockUser(selectedUser.userId, !selectedUser?.blocked)}
+                      disabled={mgmtLoading}
+                      style={{ padding: "8px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none",
+                        background: selectedUser?.blocked ? "#2E7D32" : "#C53030", color: "#fff" }}>
+                      {selectedUser?.blocked ? "✅ Deblochează" : "🚫 Blochează cont"}
+                    </button>
+                    <button
+                      onClick={() => resetUsage(selectedUser.userId)}
+                      disabled={mgmtLoading}
+                      style={{ padding: "8px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        border: "1px solid #E0DBD0", background: "#fff", color: "#1A1A1A" }}>
+                      🔄 Resetează limite AI
+                    </button>
+                    {!selectedUser?.premium && (
+                      <button
+                        onClick={() => grantPremium(selectedUser.userId)}
+                        disabled={mgmtLoading}
+                        style={{ padding: "8px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          border: "1px solid #C8A84B", background: "#FFF8E7", color: "#744210" }}>
+                        ⭐ Acordă premium gratuit
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Chapters — both subjects */}
