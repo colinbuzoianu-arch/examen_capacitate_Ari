@@ -12,8 +12,8 @@ const CHAPTER_IDS = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5"
 function adminAuth(req) {
   const auth = req.headers.authorization?.replace("Bearer ", "");
   const secret = process.env.ADMIN_SECRET;
-  // Accept both raw secret and btoa-encoded version
-  return secret && (auth === secret || auth === secret.trim());
+  // Frontend sends btoa(password), so compare against both raw and b64
+  return secret && (auth === secret || auth === btoa(secret) || auth === secret.trim());
 }
 
 async function getUserData(userId) {
