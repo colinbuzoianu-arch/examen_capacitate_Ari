@@ -6,7 +6,7 @@ import { redisCmd } from "./lib/redis.js";
 export default async function handler(req, res) {
   const secret = req.query.secret;
   // Accept both raw and btoa-encoded
-  if (secret !== process.env.ADMIN_SECRET && secret !== btoa("Babel2012")) {
+  if (!secret || secret !== process.env.ADMIN_SECRET) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 

@@ -13,7 +13,7 @@ function adminAuth(req) {
   const auth = req.headers.authorization?.replace("Bearer ", "");
   const secret = process.env.ADMIN_SECRET;
   // Accept both raw secret and btoa-encoded version
-  return auth === secret || auth === btoa("Babel2012") || auth === secret?.trim();
+  return secret && (auth === secret || auth === secret.trim());
 }
 
 async function getUserData(userId) {

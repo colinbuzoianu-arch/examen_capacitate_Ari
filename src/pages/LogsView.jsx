@@ -35,7 +35,7 @@ export default function LogsView() {
     else if (!mapped.mode) mapped.mode = "all-logs";
     const qs = new URLSearchParams(mapped).toString();
     const res = await fetch(`/api/admin-users?${qs}`, {
-      headers: { Authorization: `Bearer ${btoa("Babel2012")}` },
+      headers: { Authorization: `Bearer ${sessionStorage.getItem("en2026_admin_token") || ""}` },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

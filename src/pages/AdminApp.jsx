@@ -3,7 +3,7 @@ import { sendEmail } from "../utils/api.js";
 import { SUBJECTS, WEEKS, WEEKLY_PLAN, EXAM_ROMANA, EXAM_MATH, fmt, daysLeft, getWeekStatus, CONFIG } from "../constants.js";
 import { reminderEmailHtml, chapterUnlockEmailHtml } from "../utils/emailTemplates.js";
 
-const ADMIN_SECRET = btoa("Babel2012");
+// Admin secret removed from frontend — validated server-side
 const ALL_CHAPTERS = [
   ...SUBJECTS.romana.chapters.map(c => ({ ...c, subject: "romana" })),
   ...SUBJECTS.matematica.chapters.map(c => ({ ...c, subject: "matematica" })),
@@ -13,7 +13,7 @@ async function apiFetch(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
     headers: {
-      "Authorization": `Bearer ${ADMIN_SECRET}`,
+      "Authorization": `Bearer ${sessionStorage.getItem("en2026_admin_token") || ""}`,
       "Content-Type": "application/json",
       ...(opts.headers || {}),
     },

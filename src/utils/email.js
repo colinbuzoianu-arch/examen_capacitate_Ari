@@ -84,7 +84,7 @@ export function checkInNotifyTemplate({ studentName, parentName, weekLabel, comm
     </div>
 
     <p style="color:#666;font-size:12px;text-align:center;">
-      Notificare automată · EN 2026 Planul lui ${studentName}
+      Notificare automată · Studiu EN26
     </p>
   </div>
 </body>

@@ -110,7 +110,7 @@ export function reminderEmailHtml({
 
   <!-- Footer -->
   <div style="background:#1A1A1A;border-radius:0 0 20px 20px;padding:14px 24px;text-align:center;">
-    <p style="color:#666;font-size:11px;margin:0;">EN 2026 · Planul lui ${studentName} · Școala Babel Timișoara</p>
+    <p style="color:#666;font-size:11px;margin:0;">Studiu EN26 · en26.verumsell.com</p>
   </div>
 
 </div>

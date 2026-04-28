@@ -24,14 +24,24 @@ function AppInner() {
     if (sessionStorage.getItem("en2026_admin") === "1") setAdminUnlocked(true);
   }, []);
 
-  function loginAdmin() {
-    if (btoa(pw) === CONFIG.adminPasswordB64) {
-      sessionStorage.setItem("en2026_admin", "1");
-      setAdminUnlocked(true);
-      setMode("admin");
-      setShowAdminLogin(false);
-      setPw(""); setPwErr(false);
-    } else { setPwErr(true); setPw(""); }
+  async function loginAdmin() {
+    // Verify password server-side — never compare passwords in the browser
+    try {
+      const token = btoa(pw);
+      const res = await fetch("/api/admin-users?mode=list", {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (res.ok) {
+        sessionStorage.setItem("en2026_admin", "1");
+        sessionStorage.setItem("en2026_admin_token", token);
+        setAdminUnlocked(true);
+        setMode("admin");
+        setShowAdminLogin(false);
+        setPw(""); setPwErr(false);
+      } else {
+        setPwErr(true); setPw("");
+      }
+    } catch { setPwErr(true); setPw(""); }
   }
 
   if (loading) return <Loader />;
