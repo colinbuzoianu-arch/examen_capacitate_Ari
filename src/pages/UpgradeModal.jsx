@@ -83,7 +83,7 @@ export default function UpgradeModal({ onClose, limitType, token }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/stripe-checkout", {
+      const res = await fetch("/api/stripe?action=checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
