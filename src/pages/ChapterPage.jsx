@@ -470,6 +470,13 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
 
       </div>
       <style>{CSS}</style>
+      {upgradeModal && (
+        <UpgradeModal
+          limitType={upgradeModal}
+          token={localStorage.getItem("session_token")}
+          onClose={() => setUpgradeModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -531,13 +538,6 @@ function AnimatedLoading({ messages, subtitle }) {
         {subtitle && <div style={{ fontSize: 11, color: "#AAA", marginTop: 6, fontFamily: "'Inter',sans-serif" }}>{subtitle}</div>}
       </div>
     </div>
-    {upgradeModal && (
-        <UpgradeModal
-          limitType={upgradeModal}
-          token={localStorage.getItem("session_token")}
-          onClose={() => setUpgradeModal(null)}
-        />
-      )}
   );
 }
 
