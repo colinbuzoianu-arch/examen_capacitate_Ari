@@ -1,4 +1,4 @@
-// logger.js — sends activity events to /api/log
+// logger.js — activity logger (silent no-op if endpoint unavailable)
 
 let _userName = "";
 let _userId   = "";
@@ -9,22 +9,17 @@ export function setLoggerUser(name, userId) {
 }
 
 async function log(type, payload) {
+  // Fire and forget — never block UI, never throw errors
   try {
-    const res = await fetch("/api/log", {
+    fetch("/api/admin-users?mode=log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type,
         payload: { ...payload, userName: _userName, userId: _userId },
       }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      console.warn(`[logger] ${type} failed ${res.status}:`, data.error || data);
-    }
-  } catch (err) {
-    console.warn(`[logger] ${type} network error:`, err.message);
-  }
+    }).catch(() => {}); // silently ignore any errors
+  } catch {}
 }
 
 export const logger = {

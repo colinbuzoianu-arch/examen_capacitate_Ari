@@ -36,6 +36,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const [answers, setAnswers]         = useState(() => (ls.get(storageKey) || {}).quizAnswers || {});
   const [quizResult, setQuizResult]   = useState(() => (ls.get(storageKey) || {}).quizResult || null);
   const [evaluating, setEvaluating]   = useState(false);
+  const [upgradeModal, setUpgradeModal] = useState(null);
 
   const [screenshots, setScreenshots] = useState(() => {
     const s = ls.get(storageKey) || {};
