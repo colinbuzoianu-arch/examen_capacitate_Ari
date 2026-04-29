@@ -69,7 +69,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     const timeout = setTimeout(() => {
       // If cloud takes too long, proceed with localStorage data
       setCloudLoaded(true);
-    }, 5000);
+    }, 1500);
 
     cloudGet(cloudKey).then(val => {
       clearTimeout(timeout);

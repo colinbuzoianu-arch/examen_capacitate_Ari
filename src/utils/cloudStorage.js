@@ -15,18 +15,25 @@ const cache = {};
 
 export async function cloudGet(key) {
   if (cache[key] !== undefined) return cache[key];
-  if (!_token) return ls.get(key);
+  // Return localStorage immediately — never block on network
+  const local = ls.get(key);
+  if (!_token) return local;
   try {
-    const res = await fetch(`/api/progress?key=${encodeURIComponent(key)}`, {
+    // Race between fetch and 2s timeout
+    const fetchPromise = fetch(`/api/progress?key=${encodeURIComponent(key)}`, {
       headers: { Authorization: `Bearer ${_token}` },
     });
-    if (!res.ok) return ls.get(key);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 2000)
+    );
+    const res = await Promise.race([fetchPromise, timeoutPromise]);
+    if (!res.ok) return local;
     const data = await res.json();
     const val = data.value ?? null;
     cache[key] = val;
     return val;
   } catch {
-    return ls.get(key);
+    return local;
   }
 }
 

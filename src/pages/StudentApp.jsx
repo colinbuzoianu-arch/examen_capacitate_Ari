@@ -288,7 +288,11 @@ function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedC
           const color = s === "romana" ? "#C8392B" : "#1A5276";
           return (
             <div key={s} style={{ ...S.subCard, cursor: "pointer" }}
-              onClick={() => setView(s === "romana" ? "progress" : "progress")}>
+              onClick={() => {
+                // Deschide primul capitol nebifat din subiectul respectiv
+                const firstChap = sub.chapters.find(c => !unlockedChapters[c.id]) || sub.chapters[0];
+                setOpen({ chapterId: firstChap.id, subject: s });
+              }}>
               <div style={S.subIcon}>{sub.icon}</div>
               <div style={{ ...S.subName, color }}>{sub.short}</div>
               <div style={S.subStat}>{done} / {total}</div>
