@@ -473,7 +473,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       {upgradeModal && (
         <UpgradeModal
           limitType={upgradeModal}
-          token={localStorage.getItem("session_token")}
+          token={localStorage.getItem("en2026_token")}
           onClose={() => setUpgradeModal(null)}
         />
       )}

@@ -2,7 +2,7 @@
 
 // ── Auth token helper ─────────────────────────────────────────────────────────
 function getAuthToken() {
-  return localStorage.getItem("session_token") || "";
+  return localStorage.getItem("en2026_token") || "";
 }
 
 // ── Core call ────────────────────────────────────────────────────────────────
