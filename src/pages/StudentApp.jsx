@@ -287,7 +287,8 @@ function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedC
           const p = Math.round((done / total) * 100);
           const color = s === "romana" ? "#C8392B" : "#1A5276";
           return (
-            <div key={s} style={S.subCard}>
+            <div key={s} style={{ ...S.subCard, cursor: "pointer" }}
+              onClick={() => setView(s === "romana" ? "progress" : "progress")}>
               <div style={S.subIcon}>{sub.icon}</div>
               <div style={{ ...S.subName, color }}>{sub.short}</div>
               <div style={S.subStat}>{done} / {total}</div>

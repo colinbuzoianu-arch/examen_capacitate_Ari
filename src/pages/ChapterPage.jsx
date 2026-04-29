@@ -63,10 +63,16 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   useEffect(() => { savedRef.current = saved; }, [saved]);
 
   // ── EFFECTS ────────────────────────────────────────────────────────────────
-  // Load from cloud on mount
+  // Load from cloud on mount — with 5s timeout fallback
   useEffect(() => {
     logger.chapterOpened(chapter, subject);
+    const timeout = setTimeout(() => {
+      // If cloud takes too long, proceed with localStorage data
+      setCloudLoaded(true);
+    }, 5000);
+
     cloudGet(cloudKey).then(val => {
+      clearTimeout(timeout);
       if (val) {
         savedRef.current = val;
         setSaved(val);
@@ -79,13 +85,16 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
         else if (val.screenshot)     setScreenshots([val.screenshot]);
       }
       setCloudLoaded(true);
+    }).catch(() => {
+      clearTimeout(timeout);
+      setCloudLoaded(true); // proceed with local data on error
     });
   }, [userId]);
 
-  // Auto-load content when tab opens
+  // Auto-load content when tab opens — wait for cloud data first
   useEffect(() => {
-    if (!content && tab === "content") loadContent();
-  }, [tab]);
+    if (cloudLoaded && !content && tab === "content") loadContent();
+  }, [tab, cloudLoaded]);
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -228,6 +237,13 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   ];
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
+  if (!cloudLoaded) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 16, fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ fontSize: 32 }}>📖</div>
+      <div style={{ fontSize: 15, color: "#666" }}>Se încarcă capitolul...</div>
+    </div>
+  );
+
   return (
     <div style={S.shell}>
       {/* Header */}
