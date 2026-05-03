@@ -15,26 +15,36 @@ const cache = {};
 
 export async function cloudGet(key) {
   if (cache[key] !== undefined) return cache[key];
-  // Return localStorage immediately — never block on network
   const local = ls.get(key);
   if (!_token) return local;
   try {
-    // Race between fetch and 2s timeout
     const fetchPromise = fetch(`/api/progress?key=${encodeURIComponent(key)}`, {
       headers: { Authorization: `Bearer ${_token}` },
     });
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), 2000)
+      setTimeout(() => reject(new Error("timeout")), 3000)
     );
     const res = await Promise.race([fetchPromise, timeoutPromise]);
     if (!res.ok) return local;
     const data = await res.json();
     const val = data.value ?? null;
     cache[key] = val;
+    // Populate localStorage so sync reads (ls.get) work immediately after
+    if (val !== null) ls.set(key, val);
     return val;
   } catch {
     return local;
   }
+}
+
+// Preload all user data from cloud into localStorage + cache before app renders.
+// Called once after login/session restore. Ensures ls.get() works on new devices.
+export async function preloadFromCloud(token) {
+  if (!token) return;
+  _token = token;
+  const chapterIds = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
+  const keys = ["unlocked", "gamification", ...chapterIds.map(k => `chapter_${k}`)];
+  await Promise.allSettled(keys.map(key => cloudGet(key)));
 }
 
 export async function cloudSet(key, value) {
