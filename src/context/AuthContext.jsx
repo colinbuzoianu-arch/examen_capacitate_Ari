@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { preloadFromCloud, clearCache } from "../utils/cloudStorage.js";
 
 const AuthContext = createContext(null);
 
@@ -6,26 +7,33 @@ export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);  // { userId, email, name, role }
   const [token, setToken]     = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
 
   // Restore session on mount
   useEffect(() => {
-    const savedToken = localStorage.getItem("en2026_token");
-    if (!savedToken) { setLoading(false); return; }
-
-    fetch("/api/auth?action=verify", {
-      headers: { Authorization: `Bearer ${savedToken}` },
-    })
-      .then(r => r.json())
-      .then(data => {
+    async function restoreSession() {
+      const savedToken = localStorage.getItem("en2026_token");
+      if (!savedToken) { setLoading(false); setDataReady(true); return; }
+      try {
+        const r = await fetch("/api/auth?action=verify", {
+          headers: { Authorization: `Bearer ${savedToken}` },
+        });
+        const data = await r.json();
         if (data.ok) {
           setUser(data.user);
           setToken(savedToken);
+          await preloadFromCloud(savedToken);
         } else {
           localStorage.removeItem("en2026_token");
         }
-      })
-      .catch(() => localStorage.removeItem("en2026_token"))
-      .finally(() => setLoading(false));
+      } catch {
+        localStorage.removeItem("en2026_token");
+      } finally {
+        setLoading(false);
+        setDataReady(true);
+      }
+    }
+    restoreSession();
   }, []);
 
   async function register(email, password, name) {
@@ -53,6 +61,8 @@ export function AuthProvider({ children }) {
     localStorage.setItem("en2026_token", data.token);
     setToken(data.token);
     setUser(data.user);
+    await preloadFromCloud(data.token);
+    setDataReady(true);
     return data.user;
   }
 
@@ -64,12 +74,14 @@ export function AuthProvider({ children }) {
       }).catch(() => {});
     }
     localStorage.removeItem("en2026_token");
+    clearCache();
     setToken(null);
     setUser(null);
+    setDataReady(false);
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, register, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, dataReady, register, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
