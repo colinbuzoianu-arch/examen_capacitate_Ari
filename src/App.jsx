@@ -8,7 +8,7 @@ import StudentApp from "./pages/StudentApp.jsx";
 import AdminApp from "./pages/AdminApp.jsx";
 
 function AppInner() {
-  const { user, token, loading, logout } = useAuth();
+  const { user, token, loading, dataReady, logout } = useAuth();
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pw, setPw]     = useState("");
@@ -44,7 +44,7 @@ function AppInner() {
     } catch { setPwErr(true); setPw(""); }
   }
 
-  if (loading) return <Loader />;
+  if (loading || !dataReady) return <Loader />;
   if (!user)   return <AuthPage />;
 
   return (
