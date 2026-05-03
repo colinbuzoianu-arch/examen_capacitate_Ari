@@ -33,9 +33,7 @@ export default async function handler(req, res) {
     if (!apiKey) return res.status(500).json({ error: "Email not configured" });
 
     const senderEmail = process.env.SENDER_EMAIL || "noreply@en2026.app";
-    const appUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "https://examen-capacitate-ari.vercel.app";
+    const appUrl = "https://en26.verumsell.com";
 
     const resetLink = `${appUrl}?reset=${token}`;
 
