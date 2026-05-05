@@ -91,7 +91,7 @@ export default function AdminApp({ onLogout }) {
 
   async function loadUserUsage(userId) {
     try {
-      const data = await apiFetch(`/api/usage?userId=${userId}`);
+      const data = await apiFetch(`/api/admin-users?mode=usage&uid=${userId}`);
       setUserUsage(data.usage || null);
     } catch { setUserUsage(null); }
   }
