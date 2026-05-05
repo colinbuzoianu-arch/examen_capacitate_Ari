@@ -509,6 +509,9 @@ const EVENT_LABELS = {
   chat_message:       { icon: "💬", label: "Întrebare tutore", color: "#9C6FE4" },
   quiz_started:       { icon: "🎯", label: "Quiz început", color: "#3B82F6" },
   quiz_submitted:     { icon: "🧠", label: "Quiz trimis", color: "#10B981" },
+  essay_evaluated:    { icon: "📝", label: "Compunere evaluată", color: "#9C6FE4" },
+  math_problems_generated: { icon: "🧮", label: "Probleme generate", color: "#1A5276" },
+  math_solution_evaluated: { icon: "✍️", label: "Rezolvare verificată", color: "#1A5276" },
   chapter_unlocked:   { icon: "🏆", label: "Capitol bifat!", color: "#C8A84B" },
 };
 
