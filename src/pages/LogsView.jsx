@@ -6,6 +6,9 @@ const EVENT_META = {
   chat_message:      { icon: "💬", label: "Întrebare tutore",   color: "#9C6FE4", bg: "#F3EEFF" },
   quiz_started:      { icon: "🧠", label: "Quiz început",       color: "#FF8A65", bg: "#FFF3EF" },
   quiz_submitted:    { icon: "📝", label: "Quiz trimis",        color: "#FF8A65", bg: "#FFF3EF" },
+  essay_evaluated:   { icon: "📝", label: "Compunere evaluată",  color: "#9C6FE4", bg: "#F3EEFF" },
+  math_problems_generated: { icon: "🧮", label: "Probleme generate", color: "#1A5276", bg: "#EEF4FF" },
+  math_solution_evaluated: { icon: "✍️", label: "Rezolvare verificată", color: "#1A5276", bg: "#EEF4FF" },
   chapter_unlocked:  { icon: "🏆", label: "Capitol bifat!",     color: "#C8A84B", bg: "#FFF8E7" },
 };
 
