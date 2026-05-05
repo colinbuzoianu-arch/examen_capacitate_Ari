@@ -39,7 +39,6 @@ export default function AdminApp({ onLogout }) {
   const [userLogs, setUserLogs]       = useState([]);
   const [userLogsDay, setUserLogsDay] = useState(new Date().toISOString().slice(0, 10));
   const [detailLoading, setDetailLoad] = useState(false);
-  const [lightbox, setLightbox]       = useState(null);
   const [expandedLog, setExpandedLog] = useState({});
 
   // Usage & management
@@ -381,7 +380,6 @@ export default function AdminApp({ onLogout }) {
                       </div>
                       {chapters.map(ch => {
                         const isDone = !!userDetail.unlocked?.[ch.id];
-                        const hasScreenshots = ch.screenshots?.length > 0;
                         return (
                           <div key={ch.id} style={{ ...S.chRow, borderLeft: `3px solid ${isDone ? "#2E7D32" : "#E0DBD0"}` }}>
                             <div style={{ flex: 1 }}>
@@ -391,18 +389,8 @@ export default function AdminApp({ onLogout }) {
                               <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
                                 <ChipTag done={ch.hasContent} label="Lecție" />
                                 <ChipTag done={ch.quizResult?.passed} label={`Quiz ${ch.quizResult?.score ?? "—"}/10`} warn={ch.quizAttempts > 1} />
-                                <ChipTag done={hasScreenshots} label={`${ch.screenshots?.length || 0} poze`} />
                                 {ch.chatMessages > 0 && <ChipTag done label={`${ch.chatMessages} întrebări`} icon="💬" />}
                               </div>
-                              {/* Screenshots gallery */}
-                              {hasScreenshots && (
-                                <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                                  {ch.screenshots.map((img, i) => (
-                                    <img key={i} src={img} alt="" onClick={() => setLightbox(img)}
-                                      style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6, cursor: "pointer", border: "1px solid #E0DBD0" }} />
-                                  ))}
-                                </div>
-                              )}
                             </div>
                             {/* Override button */}
                             <button
@@ -479,13 +467,6 @@ export default function AdminApp({ onLogout }) {
 
       </div>
 
-      {/* Lightbox */}
-      {lightbox && (
-        <div style={S.lightboxOverlay} onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="" style={{ maxWidth: "92vw", maxHeight: "88vh", borderRadius: 12 }} />
-        </div>
-      )}
-
       {/* Toast */}
       {toast && <div style={S.toast}>{toast}</div>}
     </div>
@@ -528,7 +509,6 @@ const EVENT_LABELS = {
   chat_message:       { icon: "💬", label: "Întrebare tutore", color: "#9C6FE4" },
   quiz_started:       { icon: "🎯", label: "Quiz început", color: "#3B82F6" },
   quiz_submitted:     { icon: "🧠", label: "Quiz trimis", color: "#10B981" },
-  screenshot_uploaded:{ icon: "📸", label: "Screenshot urcat", color: "#06B6D4" },
   chapter_unlocked:   { icon: "🏆", label: "Capitol bifat!", color: "#C8A84B" },
 };
 
