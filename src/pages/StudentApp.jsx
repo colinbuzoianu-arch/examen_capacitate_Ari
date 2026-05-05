@@ -103,13 +103,12 @@ export default function StudentApp() {
     const roComplete = roChaps.every(c => newUnlocked[c.id]);
     const maComplete = maChaps.every(c => newUnlocked[c.id]);
     recordChapterUnlock(Object.keys(newUnlocked).length, roComplete, maComplete);
-    const gState = getGamState();
-    setGamState(gState);
+    const gStateNew = getGamState();
+    setGamState(gStateNew);
     cloudSet("gamification", gStateNew);
     showToast(`🎉 Capitol bifat! Bravo ${user?.name?.split(" ")[0] || "tu"}!`);
     const ch = [...SUBJECTS.romana.chapters, ...SUBJECTS.matematica.chapters].find(c => c.id === chapterId);
     const chapData = ls.get(`chapter_${chapterId}`) || {};
-    const gStateNew = getGamState();
     sendEmail({
       to: [user?.email],  // notify the student themselves
       subject: `🏆 ${user?.name} a bifat: ${ch?.title}`,
@@ -442,7 +441,7 @@ function Progress({ doneOf, totalOf, unlockedChapters, setOpen }) {
                 const isDone = !!unlockedChapters[ch.id];
                 const chapData = ls.get(`chapter_${ch.id}`) || {};
                 return (
-                  <div key={ch.id} onClick={() => setOpen({ chapterId: ch.id, subject: ch.subject })}
+                  <div key={ch.id} onClick={() => setOpen({ chapterId: ch.id, subject: s })}
                     style={{ ...S.progRow, background: isDone ? "#E8F5E9" : "#fff", borderColor: isDone ? "#A5D6A7" : "#E0DBD0" }}>
                     <span style={{ fontSize: 16, flexShrink: 0 }}>{isDone ? "✅" : "⬜"}</span>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: isDone ? "#2E7D32" : "#1A1A1A", fontFamily: "'Inter',sans-serif" }}>{ch.title}</span>
