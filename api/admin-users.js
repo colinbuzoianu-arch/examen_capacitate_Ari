@@ -8,6 +8,7 @@ import { getAllUsers, getSession } from "./lib/auth.js";
 import { redisCmd } from "./lib/redis.js";
 
 const CHAPTER_IDS = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
+const TOTAL_CHAPTERS = CHAPTER_IDS.length;
 
 function adminAuth(req) {
   const auth = req.headers.authorization?.replace("Bearer ", "");
@@ -19,6 +20,28 @@ function adminAuth(req) {
 // Read userId from a log entry, supporting both flat (new) and nested (legacy) shapes
 function logUserId(l) {
   return l?.userId || l?.payload?.userId || null;
+}
+
+
+function asTime(v) {
+  if (!v) return 0;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function latestIso(...values) {
+  const best = values.map(asTime).filter(Boolean).sort((a, b) => b - a)[0];
+  return best ? new Date(best).toISOString() : null;
+}
+
+function latestArea(gamification, featureUsage) {
+  const candidates = [
+    { area: "Lecții / quiz", ts: gamification?.lastStudyDate ? `${gamification.lastStudyDate}T12:00:00Z` : null },
+    { area: "Compunere", ts: featureUsage?.essay?.lastUsed || null },
+    { area: "Probleme", ts: featureUsage?.math?.lastUsed || null },
+  ].filter(c => asTime(c.ts));
+  candidates.sort((a, b) => asTime(b.ts) - asTime(a.ts));
+  return candidates[0]?.area || null;
 }
 
 function emptyFeatureUsage() {
@@ -210,13 +233,32 @@ export default async function handler(req, res) {
           const { unlocked, gamification } = await getUserData(u.userId);
           const featureRaw = await redisCmd("GET", `featureUsage:${u.userId}`).catch(() => null);
           const featureUsage = ensureFeatureUsage(featureRaw ? (typeof featureRaw === "string" ? JSON.parse(featureRaw) : featureRaw) : null);
+          const unlockedCount = Object.keys(unlocked).length;
+          const essayEvaluations = featureUsage.essay.evaluationsCompleted || 0;
+          const essayPrompts = featureUsage.essay.promptsGenerated || 0;
+          const mathEvaluations = featureUsage.math.evaluationsCompleted || 0;
+          const mathSets = featureUsage.math.setsGenerated || 0;
+          const mathSubmitted = featureUsage.math.solutionsSubmitted || 0;
+          const lastStudyAt = gamification.lastStudyDate ? `${gamification.lastStudyDate}T12:00:00Z` : null;
+          const featureLastUsed = latestIso(featureUsage.updatedAt, featureUsage.essay.lastUsed, featureUsage.math.lastUsed);
+          const lastActiveAt = latestIso(lastStudyAt, featureLastUsed, u.createdAt);
+          const engagementScore =
+            unlockedCount * 3 +
+            (gamification.quizzesPassed || 0) * 3 +
+            mathSets +
+            mathEvaluations * 2 +
+            essayEvaluations * 3;
+
           return {
             userId:   u.userId,
             name:     u.name,
             email:    u.email,
             createdAt: u.createdAt,
+            blocked:  !!u.blocked,
+            premium:  !!u.premium,
             stats: {
-              unlockedChapters: Object.keys(unlocked).length,
+              unlockedChapters: unlockedCount,
+              progressPercent:  Math.round((unlockedCount / TOTAL_CHAPTERS) * 100),
               totalXP:          gamification.totalXP || 0,
               currentStreak:    gamification.currentStreak || 0,
               maxStreak:        gamification.maxStreak || 0,
@@ -224,17 +266,22 @@ export default async function handler(req, res) {
               perfectQuizzes:   gamification.perfectQuizzes || 0,
               lastStudyDate:    gamification.lastStudyDate || null,
               badges:           (gamification.unlockedBadges || []).length,
-              essayEvaluations: featureUsage.essay.evaluationsCompleted || 0,
-              mathEvaluations:  featureUsage.math.evaluationsCompleted || 0,
-              mathSets:         featureUsage.math.setsGenerated || 0,
-              featureLastUsed:  featureUsage.updatedAt || featureUsage.essay.lastUsed || featureUsage.math.lastUsed || null,
+              essayPrompts,
+              essayEvaluations,
+              mathEvaluations,
+              mathSets,
+              mathSubmitted,
+              featureLastUsed,
+              lastActiveAt,
+              lastArea:         latestArea(gamification, featureUsage),
+              engagementScore,
             },
           };
         } catch {
           return { userId: u.userId, name: u.name, email: u.email, stats: {} };
         }
       }));
-      withStats.sort((a, b) => (b.stats.unlockedChapters || 0) - (a.stats.unlockedChapters || 0));
+      withStats.sort((a, b) => asTime(b.stats?.lastActiveAt) - asTime(a.stats?.lastActiveAt));
       return res.status(200).json({ ok: true, users: withStats });
     } catch (err) {
       return res.status(500).json({ error: err.message });
