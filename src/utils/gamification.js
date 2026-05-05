@@ -8,7 +8,6 @@ export const XP = {
   QUIZ_ATTEMPT:     15,   // took a quiz (any score)
   QUIZ_PASS:        50,   // passed quiz 8/10+
   QUIZ_PERFECT:     100,  // got 10/10
-  SCREENSHOT:       20,   // uploaded proof
   CHAPTER_UNLOCK:   75,   // full chapter completed
   DAILY_STREAK_3:   30,   // 3-day streak bonus
   DAILY_STREAK_7:   100,  // 7-day streak bonus
@@ -81,14 +80,6 @@ export const BADGES = [
     xpReward: 150,
   },
   {
-    id: "screenshot_pro",
-    icon: "📸",
-    name: "Screenshot Pro",
-    desc: "5 dovezi încărcate — organizat!",
-    condition: (s) => s.screenshots >= 5,
-    xpReward: 30,
-  },
-  {
     id: "curious_mind",
     icon: "🧠",
     name: "Mintea Curioasă",
@@ -122,7 +113,6 @@ export function getGamState() {
     totalXP: 0,
     quizzesPassed: 0,
     perfectQuizzes: 0,
-    screenshots: 0,
     chatMessages: 0,
     chaptersUnlocked: 0,
     romanaComplete: false,
@@ -216,13 +206,6 @@ export function recordQuizAttempt(score, passed) {
   if (score === 10) return addXP(XP.QUIZ_PERFECT, `Quiz PERFECT 10/10! 💎`);
   if (passed)       return addXP(XP.QUIZ_PASS,    `Quiz trecut ${score}/10 🧠`);
   return addXP(XP.QUIZ_ATTEMPT, `Quiz încercat ${score}/10`);
-}
-
-export function recordScreenshot() {
-  let state = getGamState();
-  state.screenshots = (state.screenshots || 0) + 1;
-  saveGamState(state);
-  return addXP(XP.SCREENSHOT, "Screenshot urcat 📸");
 }
 
 export function recordChapterUnlock(chaptersUnlocked, romanaComplete, mateComplete) {
