@@ -4,7 +4,7 @@
 // GET /api/admin-users?mode=logs&uid=X&day=YYYY-MM-DD → logs for one user
 // POST /api/admin-users?mode=override     → manually set chapter as unlocked
 
-import { getAllUsers } from "./lib/auth.js";
+import { getAllUsers, getSession } from "./lib/auth.js";
 import { redisCmd } from "./lib/redis.js";
 
 const CHAPTER_IDS = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
@@ -14,6 +14,11 @@ function adminAuth(req) {
   const secret = process.env.ADMIN_SECRET;
   // Frontend sends btoa(password), so compare against both raw and b64
   return secret && (auth === secret || auth === btoa(secret) || auth === secret.trim());
+}
+
+// Read userId from a log entry, supporting both flat (new) and nested (legacy) shapes
+function logUserId(l) {
+  return l?.userId || l?.payload?.userId || null;
 }
 
 async function getUserData(userId) {
@@ -41,9 +46,45 @@ async function getUserData(userId) {
 }
 
 export default async function handler(req, res) {
-  if (!adminAuth(req)) return res.status(401).json({ error: "Unauthorized" });
-
   const { mode, uid, day } = req.query;
+
+  // ── WRITE a log entry (called by the student app, NOT an admin route) ───────
+  // Auth: validates the student's own session token (Authorization: Bearer <token>)
+  // We flatten userId/userName to the top level so the existing read paths
+  // (mode=logs filter and LogsView field access) work without further changes.
+  if (req.method === "POST" && mode === "log") {
+    try {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      const session = await getSession(token).catch(() => null);
+      if (!session?.userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { type, payload } = req.body || {};
+      if (!type) return res.status(400).json({ error: "Missing type" });
+
+      const safePayload = (payload && typeof payload === "object") ? payload : {};
+      // Server is the source of truth for userId — never trust the client's claim
+      const entry = {
+        ...safePayload,
+        type,
+        userId: session.userId,
+        userName: safePayload.userName || "",
+        ts: new Date().toISOString(),
+      };
+
+      const today = new Date().toISOString().slice(0, 10);
+      const key = `logs:${today}`;
+      await redisCmd("LPUSH", key, JSON.stringify(entry));
+      await redisCmd("LTRIM", key, 0, 499);
+      await redisCmd("EXPIRE", key, 60 * 60 * 24 * 90);
+
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // All routes below are admin-only
+  if (!adminAuth(req)) return res.status(401).json({ error: "Unauthorized" });
 
   // ── LIST all users ──────────────────────────────────────────────────────────
   if (req.method === "GET" && mode === "list") {
@@ -119,7 +160,15 @@ export default async function handler(req, res) {
       const logs = (raw || [])
         .map(r => { try { return JSON.parse(r); } catch { return null; } })
         .filter(Boolean)
-        .filter(l => l.userId === uid); // filter by userId
+        .filter(l => logUserId(l) === uid) // accepts flat or nested payload shape
+        .map(l => {
+          // Normalize legacy nested shape so the UI sees flat fields
+          if (l.payload && typeof l.payload === "object") {
+            const { payload, ...rest } = l;
+            return { ...payload, ...rest };
+          }
+          return l;
+        });
       return res.status(200).json({ ok: true, logs, day: targetDay });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -183,7 +232,16 @@ export default async function handler(req, res) {
       const { day } = req.query;
       const targetDay = day || new Date().toISOString().slice(0, 10);
       const raw = await redisCmd("LRANGE", `logs:${targetDay}`, 0, 499);
-      const logs = (raw || []).map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+      const logs = (raw || [])
+        .map(r => { try { return JSON.parse(r); } catch { return null; } })
+        .filter(Boolean)
+        .map(l => {
+          if (l.payload && typeof l.payload === "object") {
+            const { payload, ...rest } = l;
+            return { ...payload, ...rest };
+          }
+          return l;
+        });
       return res.status(200).json({ ok: true, logs, day: targetDay });
     } catch (err) {
       return res.status(500).json({ error: err.message });
