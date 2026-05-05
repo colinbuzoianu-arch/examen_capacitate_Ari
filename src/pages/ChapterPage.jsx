@@ -6,7 +6,7 @@ import { SUBJECTS, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import UpgradeModal from "./UpgradeModal.jsx";
-import { recordContentRead, recordChatMessage, recordQuizAttempt, recordScreenshot } from "../utils/gamification.js";
+import { recordContentRead, recordChatMessage, recordQuizAttempt } from "../utils/gamification.js";
 
 export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlock }) {
   const { user } = useAuth();
@@ -38,18 +38,9 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const [evaluating, setEvaluating]   = useState(false);
   const [upgradeModal, setUpgradeModal] = useState(null);
 
-  const [screenshots, setScreenshots] = useState(() => {
-    const s = ls.get(storageKey) || {};
-    if (s.screenshots?.length) return s.screenshots;
-    if (s.screenshot)          return [s.screenshot];
-    return [];
-  });
-  const fileRef = useRef();
-
   // ── DERIVED ────────────────────────────────────────────────────────────────
-  const quizPassed    = quizResult?.passed || saved.quizResult?.passed;
-  const hasScreenshot = screenshots.length > 0;
-  const isUnlocked    = quizPassed && hasScreenshot;
+  const quizPassed = quizResult?.passed || saved.quizResult?.passed;
+  const isUnlocked = quizPassed;
 
   // ── PERSIST ────────────────────────────────────────────────────────────────
   function persist(patch) {
@@ -82,8 +73,6 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
         if (val.quiz)         setQuiz(val.quiz);
         if (val.quizAnswers)  setAnswers(val.quizAnswers);
         if (val.quizResult)   setQuizResult(val.quizResult);
-        if (val.screenshots?.length) setScreenshots(val.screenshots);
-        else if (val.screenshot)     setScreenshots([val.screenshot]);
       }
       setCloudLoaded(true);
     }).catch(() => {
@@ -186,12 +175,9 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       persist({ quizResult: result, quizAttempts: attemptNum });
       logger.quizSubmitted(chapter, subject, result.score, result.passed, answers, quiz.questions, attemptNum);
       recordQuizAttempt(result.score, result.passed);
-      if (result.passed) {
-        const hasProof = screenshots.length > 0 || savedRef.current.screenshots?.length > 0;
-        if (hasProof && !savedRef.current._unlockCalled) {
-          savedRef.current._unlockCalled = true;
-          onUnlock(chapterId);
-        }
+      if (result.passed && !savedRef.current._unlockCalled) {
+        savedRef.current._unlockCalled = true;
+        onUnlock(chapterId);
       }
     } catch {
       alert("Eroare la evaluare. Încearcă din nou.");
@@ -204,37 +190,12 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     persist({ quiz: null, quizAnswers: {}, quizResult: null });
   }
 
-  function handleFile(e) {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const img = ev.target.result;
-        setScreenshots(prev => {
-          const updated = [...prev, img];
-          persist({ screenshots: updated, screenshot: updated[0] });
-          return updated;
-        });
-        logger.screenshotUploaded(chapter, subject);
-        recordScreenshot();
-        const qp = quizPassed || savedRef.current.quizResult?.passed;
-        if (qp && !savedRef.current._unlockCalled) {
-          savedRef.current._unlockCalled = true;
-          onUnlock(chapterId);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
-  }
 
   // ── TABS ───────────────────────────────────────────────────────────────────
   const tabs = [
-    { id: "content",    icon: "📚", label: "Lecție" },
-    { id: "chat",       icon: "💬", label: "Tutore" },
-    { id: "quiz",       icon: "🧠", label: "Quiz" + (quizPassed ? " ✓" : "") },
-    { id: "screenshot", icon: "📸", label: "Dovadă" + (hasScreenshot ? " ✓" : "") },
+    { id: "content", icon: "📚", label: "Lecție" },
+    { id: "chat",    icon: "💬", label: "Tutore" },
+    { id: "quiz",    icon: "🧠", label: "Quiz" + (quizPassed ? " ✓" : "") },
   ];
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
@@ -260,8 +221,6 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       {/* Unlock bar */}
       <div style={S.unlockBar}>
         <Step done={quizPassed} label="Quiz 8/10" n="1" />
-        <div style={S.unlockLine} />
-        <Step done={hasScreenshot} label="Screenshot" n="2" />
         <div style={S.unlockLine} />
         <Step done={isUnlocked} label="Bifat" n="🔒" gold />
       </div>
@@ -379,7 +338,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                       {quizResult.score}/10
                     </div>
                     <div style={{ fontSize: 13, color: "#444", margin: "6px 0" }}>
-                      {quizResult.passed ? "Ai trecut! Acum încarcă și un screenshot." : "Nu ai trecut. Mai încearcă!"}
+                      {quizResult.passed ? "Felicitări! Capitolul e bifat 🎉" : "Nu ai trecut. Mai încearcă!"}
                     </div>
                     <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6, fontStyle: "italic" }}>{quizResult.feedback}</div>
                     {!quizResult.passed && <button style={{ ...S.btnY, width: "auto", marginTop: 12 }} onClick={resetQuiz}>🔄 Încearcă din nou</button>}
@@ -422,64 +381,6 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                     {evaluating ? "⏳ Claude corectează..." : `✅ Trimite răspunsurile (${Object.keys(answers).length}/10)`}
                   </button>
                 )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* SCREENSHOT */}
-        {tab === "screenshot" && (
-          <div>
-            <div style={S.card}>
-              <div style={S.cardTitle}>📸 Dovada muncii tale</div>
-              <p style={{ fontSize: 13, color: "#444", marginBottom: 16, lineHeight: 1.6 }}>
-                Fă o poză cu notițele sau manualul din care ai studiat <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
-              </p>
-              {!quizPassed && (
-                <div style={S.warningBox}>🧠 Trebuie să treci mai întâi quiz-ul (8/10).</div>
-              )}
-              <div style={{ ...S.dropZone, borderColor: screenshots.length > 0 ? "#2E7D32" : "#D5D0C8" }}
-                onClick={() => fileRef.current?.click()}>
-                <div style={{ textAlign: "center", color: "#AAA" }}>
-                  <div style={{ fontSize: 32 }}>📷</div>
-                  <div style={{ fontSize: 13, color: "#888" }}>
-                    {screenshots.length > 0 ? `${screenshots.length} poze — apasă pentru a adăuga` : "Apasă pentru a alege poze"}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#BBB", marginTop: 4 }}>Poți selecta mai multe deodată</div>
-                </div>
-              </div>
-              <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleFile} />
-              {screenshots.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>
-                    📸 {screenshots.length} {screenshots.length === 1 ? "poză încărcată" : "poze încărcate"}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
-                    {screenshots.map((img, i) => (
-                      <div key={i} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: "1px solid #E0DBD0" }}>
-                        <img src={img} alt={`screenshot ${i+1}`} style={{ width: "100%", height: 90, objectFit: "cover", display: "block" }} />
-                        <button onClick={() => {
-                          const upd = screenshots.filter((_, idx) => idx !== i);
-                          setScreenshots(upd);
-                          persist({ screenshots: upd, screenshot: upd[0] || null });
-                        }} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.6)", color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: 11, lineHeight: 1 }}>✕</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            {isUnlocked ? (
-              <div style={{ ...S.resultBanner, background: "#E8F5E9", borderColor: "#A5D6A7" }}>
-                <div style={{ fontSize: 32 }}>🏆</div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: "#2E7D32", fontFamily: "'Syne',sans-serif" }}>Capitol bifat!</div>
-                <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>Felicitări! Continuă cu următorul capitol.</div>
-              </div>
-            ) : (
-              <div style={S.unlockChecklist}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 10 }}>Pentru a bifa capitolul:</div>
-                <div style={S.checkItem}><span style={{ color: quizPassed ? "#6BCB77" : "#AAA" }}>{quizPassed ? "✅" : "⬜"}</span> Quiz trecut (min. 8/10)</div>
-                <div style={S.checkItem}><span style={{ color: hasScreenshot ? "#6BCB77" : "#AAA" }}>{hasScreenshot ? "✅" : "⬜"}</span> Screenshot încărcat</div>
               </div>
             )}
           </div>
