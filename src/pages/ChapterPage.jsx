@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { cloudGet, cloudSet } from "../utils/cloudStorage.js";
 import { ls } from "../utils/storage.js";
-import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
+import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor, generateEssayPrompt, evaluateEssay, generateMathProblems, evaluateMathSolution } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -38,6 +38,23 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const [evaluating, setEvaluating]   = useState(false);
   const [upgradeModal, setUpgradeModal] = useState(null);
 
+  // ── ESSAY (Romanian only) ──────────────────────────────────────────────────
+  const [essayPrompt, setEssayPrompt] = useState(() => (ls.get(storageKey) || {}).essayPrompt || null);
+  const [essayText, setEssayText]     = useState(() => (ls.get(storageKey) || {}).essayText || "");
+  const [essayResult, setEssayResult] = useState(() => (ls.get(storageKey) || {}).essayResult || null);
+  const [loadingEssayPrompt, setLEP]  = useState(false);
+  const [evaluatingEssay, setEvalEssay] = useState(false);
+  const [essayError, setEssayError]   = useState(null);
+
+  // ── MATH PROBLEMS (Math only) ──────────────────────────────────────────────
+  const [mathProblems, setMathProblems] = useState(() => (ls.get(storageKey) || {}).mathProblems || null);
+  const [loadingProblems, setLPB]       = useState(false);
+  const [problemsError, setProblemsError] = useState(null);
+  const [revealedSolutions, setRevealed]  = useState({}); // { problemId: true }
+  const [studentSolutions, setStudentSol] = useState({}); // { problemId: "text" }
+  const [solutionVerdicts, setVerdicts]   = useState({}); // { problemId: { verdict, scor, comentariu, indiciu } }
+  const [evalProblemId, setEvalPid]       = useState(null); // which problem is being evaluated
+
   // ── DERIVED ────────────────────────────────────────────────────────────────
   const quizPassed = quizResult?.passed || saved.quizResult?.passed;
   const isUnlocked = quizPassed;
@@ -73,6 +90,10 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
         if (val.quiz)         setQuiz(val.quiz);
         if (val.quizAnswers)  setAnswers(val.quizAnswers);
         if (val.quizResult)   setQuizResult(val.quizResult);
+        if (val.essayPrompt)  setEssayPrompt(val.essayPrompt);
+        if (val.essayText)    setEssayText(val.essayText);
+        if (val.essayResult)  setEssayResult(val.essayResult);
+        if (val.mathProblems) setMathProblems(val.mathProblems);
       }
       setCloudLoaded(true);
     }).catch(() => {
@@ -190,12 +211,113 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     persist({ quiz: null, quizAnswers: {}, quizResult: null });
   }
 
+  // ── ESSAY HANDLERS ──────────────────────────────────────────────────────────
+  async function loadEssayPrompt() {
+    setLEP(true);
+    setEssayError(null);
+    try {
+      const p = await generateEssayPrompt(chapter);
+      setEssayPrompt(p);
+      setEssayText("");
+      setEssayResult(null);
+      persist({ essayPrompt: p, essayText: "", essayResult: null });
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
+      else setEssayError(e.message || "Eroare la generarea cerinței.");
+    }
+    setLEP(false);
+  }
+
+  function updateEssayText(t) {
+    setEssayText(t);
+    persist({ essayText: t });
+  }
+
+  async function submitEssay() {
+    if (!essayPrompt || !essayText.trim() || evaluatingEssay) return;
+    setEvalEssay(true);
+    setEssayError(null);
+    try {
+      const result = await evaluateEssay(chapter, essayPrompt, essayText, user?.name?.split(" ")[0] || "elevul");
+      setEssayResult(result);
+      persist({ essayResult: result });
+      logger.essayEvaluated(chapter, subject, result.score, result.wordCount);
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
+      else setEssayError(e.message || "Eroare la evaluare.");
+    }
+    setEvalEssay(false);
+  }
+
+  function resetEssay() {
+    setEssayPrompt(null); setEssayText(""); setEssayResult(null);
+    persist({ essayPrompt: null, essayText: "", essayResult: null });
+  }
+
+  // ── MATH PROBLEMS HANDLERS ──────────────────────────────────────────────────
+  async function loadMathProblems() {
+    setLPB(true);
+    setProblemsError(null);
+    try {
+      const data = await generateMathProblems(chapter);
+      setMathProblems(data);
+      setRevealed({});
+      setStudentSol({});
+      setVerdicts({});
+      persist({ mathProblems: data });
+      logger.mathProblemsGenerated(chapter, subject);
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("lesson");
+      else setProblemsError(e.message || "Eroare la generarea problemelor.");
+    }
+    setLPB(false);
+  }
+
+  function toggleSolution(problemId) {
+    setRevealed(prev => ({ ...prev, [problemId]: !prev[problemId] }));
+  }
+
+  function updateStudentSolution(problemId, text) {
+    setStudentSol(prev => ({ ...prev, [problemId]: text }));
+  }
+
+  async function checkMathSolution(problem) {
+    const sol = studentSolutions[problem.id]?.trim();
+    if (!sol || evalProblemId === problem.id) return;
+    setEvalPid(problem.id);
+    try {
+      const verdict = await evaluateMathSolution(problem, sol, user?.name?.split(" ")[0] || "elevul");
+      setVerdicts(prev => ({ ...prev, [problem.id]: verdict }));
+      logger.mathSolutionEvaluated(chapter, subject, problem.dificultate, verdict.verdict, verdict.scor);
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
+      else setVerdicts(prev => ({ ...prev, [problem.id]: { verdict: "gresit", scor: 0, comentariu: "Eroare la verificare. Încearcă din nou.", indiciu: "" } }));
+    }
+    setEvalPid(null);
+  }
+
+  function resetMathProblems() {
+    setMathProblems(null); setRevealed({}); setStudentSol({}); setVerdicts({});
+    persist({ mathProblems: null });
+  }
+
+  // ── DERIVED FOR ESSAY ──────────────────────────────────────────────────────
+  const essayWordCount = essayText.trim().split(/\s+/).filter(Boolean).length;
+  const essayInRange = essayPrompt
+    ? essayWordCount >= essayPrompt.lungimeMin && essayWordCount <= essayPrompt.lungimeMax
+    : false;
 
   // ── TABS ───────────────────────────────────────────────────────────────────
   const tabs = [
     { id: "content", icon: "📚", label: "Lecție" },
     { id: "chat",    icon: "💬", label: "Tutore" },
     { id: "quiz",    icon: "🧠", label: "Quiz" + (quizPassed ? " ✓" : "") },
+    ...(subject === "romana"
+      ? [{ id: "essay", icon: "📝", label: "Compunere" + (essayResult ? ` ${essayResult.score}` : "") }]
+      : []),
+    ...(subject === "matematica"
+      ? [{ id: "math", icon: "🧮", label: "Probleme" }]
+      : []),
   ];
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
@@ -382,6 +504,319 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                   </button>
                 )}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* COMPUNERE (Romana only) */}
+        {tab === "essay" && subject === "romana" && (
+          <div>
+            {!essayPrompt ? (
+              <div style={S.card}>
+                <div style={S.cardTitle}>📝 Antrenament redactare — Subiectul II</div>
+                <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
+                  La EN VIII, Subiectul II îți cere să redactezi un text de <strong>150-300 cuvinte</strong>.
+                  E unde se câștigă sau se pierd 16 puncte. Aici primești o cerință pe tema capitolului
+                  <strong> "{chapter.title}"</strong>, scrii compunerea, iar Claude o evaluează după baremul oficial.
+                </p>
+                <div style={{ background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#7A5C00", marginBottom: 14, lineHeight: 1.5 }}>
+                  ⚠️ <strong>Important:</strong> lungimea trebuie să fie strict 150-300 cuvinte.
+                  Texte mai scurte sau mai lungi pierd puncte la criteriul de redactare — exact ca la examenul real.
+                </div>
+                <button style={S.btnY} onClick={loadEssayPrompt} disabled={loadingEssayPrompt}>
+                  {loadingEssayPrompt ? "⏳ Generează cerința..." : "📝 Cere subiect de compunere"}
+                </button>
+                {essayError && <div style={{ ...S.errorBox, marginTop: 12 }}>❌ {essayError}</div>}
+              </div>
+            ) : (
+              <>
+                {/* Subiectul */}
+                <div style={S.card}>
+                  <div style={{ fontSize: 11, color: "#C8A84B", marginBottom: 6, fontWeight: 800, fontFamily: "'Syne',sans-serif", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Subiect — text {essayPrompt.tip}
+                  </div>
+                  <div style={{ fontSize: 14, color: "#1A1A1A", lineHeight: 1.65, marginBottom: 12, fontWeight: 500 }}>
+                    {essayPrompt.cerinta}
+                  </div>
+                  {essayPrompt.indicatii?.length > 0 && (
+                    <div style={{ background: "#F8F6F2", borderRadius: 8, padding: "10px 12px", marginBottom: 4 }}>
+                      <div style={{ fontSize: 11, color: "#888", fontWeight: 700, marginBottom: 6 }}>Indicații:</div>
+                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#555", lineHeight: 1.6 }}>
+                        {essayPrompt.indicatii.map((ind, i) => <li key={i}>{ind}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Compunerea elevului */}
+                <div style={S.card}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "#1A1A1A" }}>✏️ Scrie aici compunerea ta</div>
+                    <div style={{
+                      fontSize: 12, fontWeight: 700,
+                      color: essayInRange ? "#2E7D32" : essayWordCount === 0 ? "#999" : "#C62828",
+                      fontFamily: "'Inter',sans-serif",
+                    }}>
+                      {essayWordCount} / {essayPrompt.lungimeMin}-{essayPrompt.lungimeMax} cuvinte
+                      {essayInRange && " ✓"}
+                    </div>
+                  </div>
+                  <textarea
+                    value={essayText}
+                    onChange={e => updateEssayText(e.target.value)}
+                    placeholder={`Începe să scrii aici... (minim ${essayPrompt.lungimeMin}, maxim ${essayPrompt.lungimeMax} cuvinte)`}
+                    disabled={!!essayResult}
+                    style={{
+                      width: "100%", minHeight: 220, padding: 12, fontSize: 14, lineHeight: 1.7,
+                      border: `1px solid ${essayInRange ? "#A5D6A7" : "#E0DBD0"}`,
+                      borderRadius: 8, fontFamily: "Georgia, serif", resize: "vertical",
+                      background: essayResult ? "#F8F6F2" : "#fff", color: "#1A1A1A", outline: "none",
+                    }}
+                  />
+                  {!essayResult && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button
+                        style={{ ...S.btnY, marginTop: 0, opacity: (essayInRange && !evaluatingEssay) ? 1 : 0.5 }}
+                        onClick={submitEssay}
+                        disabled={!essayInRange || evaluatingEssay}
+                      >
+                        {evaluatingEssay ? "⏳ Claude evaluează..." : "✅ Trimite spre evaluare"}
+                      </button>
+                      <button style={S.btnGray} onClick={resetEssay}>🔄 Alt subiect</button>
+                    </div>
+                  )}
+                  {!essayInRange && essayWordCount > 0 && !essayResult && (
+                    <div style={{ fontSize: 11, color: "#C62828", marginTop: 8, fontStyle: "italic" }}>
+                      {essayWordCount < essayPrompt.lungimeMin
+                        ? `Mai ai nevoie de cel puțin ${essayPrompt.lungimeMin - essayWordCount} cuvinte.`
+                        : `Ai depășit limita cu ${essayWordCount - essayPrompt.lungimeMax} cuvinte. Restrânge textul.`}
+                    </div>
+                  )}
+                  {essayError && <div style={{ ...S.errorBox, marginTop: 12 }}>❌ {essayError}</div>}
+                </div>
+
+                {/* Rezultat */}
+                {essayResult && (
+                  <>
+                    {/* Score banner */}
+                    <div style={{ ...S.resultBanner, background: essayResult.score >= 8 ? "#E8F5E9" : essayResult.score >= 5 ? "#FFF8E7" : "#FFF0EE", borderColor: essayResult.score >= 8 ? "#A5D6A7" : essayResult.score >= 5 ? "#F0D98A" : "#FFCDD2" }}>
+                      <div style={{ fontSize: 32, marginBottom: 6 }}>{essayResult.score >= 8 ? "🎉" : essayResult.score >= 5 ? "📈" : "💪"}</div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: essayResult.score >= 8 ? "#2E7D32" : essayResult.score >= 5 ? "#7A5C00" : "#C62828", fontFamily: "'Syne',sans-serif" }}>
+                        {essayResult.score}/10
+                      </div>
+                      <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                        {essayResult.totalP}/{essayResult.maxP} puncte · {essayResult.wordCount} cuvinte
+                      </div>
+                    </div>
+
+                    {/* Defalcare per criteriu */}
+                    <div style={S.card}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: "#1A1A1A", marginBottom: 12 }}>📊 Defalcare pe criterii (barem EN VIII)</div>
+                      {essayResult.criterii.map((c, i) => (
+                        <div key={i} style={{ marginBottom: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#1A1A1A", textTransform: "capitalize" }}>{c.nume}</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: c.punctaj === c.maxim ? "#2E7D32" : c.punctaj >= c.maxim * 0.6 ? "#C8A84B" : "#C62828" }}>
+                              {c.punctaj}/{c.maxim}p
+                            </div>
+                          </div>
+                          <div style={{ height: 6, background: "#F0EDE6", borderRadius: 3, overflow: "hidden", marginBottom: 4 }}>
+                            <div style={{ height: "100%", width: `${(c.punctaj / c.maxim) * 100}%`, background: c.punctaj === c.maxim ? "#2E7D32" : c.punctaj >= c.maxim * 0.6 ? "#C8A84B" : "#E8654A", borderRadius: 3 }} />
+                          </div>
+                          {c.comentariu && <div style={{ fontSize: 11, color: "#666", lineHeight: 1.5, fontStyle: "italic" }}>{c.comentariu}</div>}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Puncte forte */}
+                    {essayResult.puncteforte?.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "#2E7D32", marginBottom: 8 }}>✨ Puncte forte</div>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#444", lineHeight: 1.7 }}>
+                          {essayResult.puncteforte.map((p, i) => <li key={i}>{p}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* De îmbunătățit */}
+                    {essayResult.deImbunatatit?.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "#C8A84B", marginBottom: 8 }}>🎯 De îmbunătățit</div>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#444", lineHeight: 1.7 }}>
+                          {essayResult.deImbunatatit.map((p, i) => <li key={i}>{p}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Rescrieri sugerate */}
+                    {essayResult.rescrieri?.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "#1A1A1A", marginBottom: 10 }}>✏️ Sugestii de rescriere</div>
+                        {essayResult.rescrieri.map((r, i) => (
+                          <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < essayResult.rescrieri.length - 1 ? "1px solid #F0EDE6" : "none" }}>
+                            <div style={{ fontSize: 11, color: "#C62828", marginBottom: 4, fontWeight: 600 }}>Original:</div>
+                            <div style={{ fontSize: 12, color: "#666", fontStyle: "italic", marginBottom: 8, padding: "6px 10px", background: "#FFF0EE", borderRadius: 6, borderLeft: "3px solid #FFCDD2" }}>"{r.original}"</div>
+                            <div style={{ fontSize: 11, color: "#2E7D32", marginBottom: 4, fontWeight: 600 }}>Sugestie:</div>
+                            <div style={{ fontSize: 12, color: "#1A1A1A", padding: "6px 10px", background: "#E8F5E9", borderRadius: 6, borderLeft: "3px solid #A5D6A7", lineHeight: 1.5 }}>"{r.sugestie}"</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button style={{ ...S.btnY, marginTop: 16 }} onClick={resetEssay}>
+                      📝 Încearcă altă compunere
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* PROBLEME (Mate only) */}
+        {tab === "math" && subject === "matematica" && (
+          <div>
+            {!mathProblems ? (
+              <div style={S.card}>
+                <div style={S.cardTitle}>🧮 Probleme rezolvate pas-cu-pas</div>
+                <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
+                  La EN VIII Matematică, ce contează e să <strong>arăți pașii</strong>, nu doar răspunsul.
+                  La Subiectul III primești puncte parțiale chiar dacă răspunsul final e greșit.
+                </p>
+                <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
+                  Aici Claude îți generează 3 probleme pe tema <strong>"{chapter.title}"</strong> —
+                  una ușoară, una medie, una grea — cu rezolvare pas-cu-pas. Poți încerca singur și
+                  primi feedback, sau să vezi direct rezolvarea.
+                </p>
+                <button style={S.btnY} onClick={loadMathProblems} disabled={loadingProblems}>
+                  {loadingProblems ? "⏳ Generează probleme..." : "🧮 Generează 3 probleme model"}
+                </button>
+                {problemsError && <div style={{ ...S.errorBox, marginTop: 12 }}>❌ {problemsError}</div>}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, color: "#888", fontFamily: "'Inter',sans-serif" }}>
+                    {mathProblems.problems.length} probleme generate
+                  </div>
+                  <button style={S.btnGray} onClick={resetMathProblems}>🔄 Probleme noi</button>
+                </div>
+
+                {mathProblems.problems.map((p, idx) => {
+                  const revealed = !!revealedSolutions[p.id];
+                  const studentSol = studentSolutions[p.id] || "";
+                  const verdict = solutionVerdicts[p.id];
+                  const evaluating = evalProblemId === p.id;
+                  const diffColor = p.dificultate === "ușor" ? "#2E7D32" : p.dificultate === "mediu" ? "#C8A84B" : "#C62828";
+                  const diffBg    = p.dificultate === "ușor" ? "#E8F5E9" : p.dificultate === "mediu" ? "#FFF8E7" : "#FFF0EE";
+                  return (
+                    <div key={p.id} style={{ ...S.card, borderLeft: `4px solid ${diffColor}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div style={{ fontWeight: 800, fontSize: 12, color: "#1A1A1A", fontFamily: "'Syne',sans-serif", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Problema {idx + 1}
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 12, background: diffBg, color: diffColor, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          {p.dificultate}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 14, color: "#1A1A1A", lineHeight: 1.7, marginBottom: 14, whiteSpace: "pre-wrap" }}>
+                        {p.enunt}
+                      </div>
+
+                      {/* Try-yourself area */}
+                      {!revealed && !verdict && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, color: "#666", fontWeight: 700, marginBottom: 6 }}>🤔 Încearcă singur:</div>
+                          <textarea
+                            value={studentSol}
+                            onChange={e => updateStudentSolution(p.id, e.target.value)}
+                            placeholder="Scrie aici rezolvarea ta, pas cu pas..."
+                            style={{ width: "100%", minHeight: 100, padding: 10, fontSize: 13, lineHeight: 1.6, border: "1px solid #E0DBD0", borderRadius: 8, fontFamily: "'Inter',sans-serif", resize: "vertical", background: "#fff", color: "#1A1A1A", outline: "none" }}
+                          />
+                          <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                            <button
+                              style={{ ...S.btnY, marginTop: 0, flex: "1 1 auto", opacity: (studentSol.trim() && !evaluating) ? 1 : 0.5 }}
+                              onClick={() => checkMathSolution(p)}
+                              disabled={!studentSol.trim() || evaluating}
+                            >
+                              {evaluating ? "⏳ Verifică..." : "✅ Verifică rezolvarea"}
+                            </button>
+                            <button style={S.btnGray} onClick={() => toggleSolution(p.id)}>
+                              👁️ Arată rezolvarea
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Verdict */}
+                      {verdict && (
+                        <div style={{
+                          background: verdict.verdict === "corect" ? "#E8F5E9" : verdict.verdict === "partial" ? "#FFF8E7" : "#FFF0EE",
+                          border: `1px solid ${verdict.verdict === "corect" ? "#A5D6A7" : verdict.verdict === "partial" ? "#F0D98A" : "#FFCDD2"}`,
+                          borderRadius: 10, padding: 12, marginBottom: 12,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                            <div style={{ fontWeight: 800, fontSize: 13, color: verdict.verdict === "corect" ? "#2E7D32" : verdict.verdict === "partial" ? "#7A5C00" : "#C62828", fontFamily: "'Syne',sans-serif", textTransform: "uppercase" }}>
+                              {verdict.verdict === "corect" ? "✅ Corect" : verdict.verdict === "partial" ? "📈 Parțial" : "💪 Mai exersează"}
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#666" }}>{verdict.scor}/3p</div>
+                          </div>
+                          {verdict.comentariu && <div style={{ fontSize: 12, color: "#444", lineHeight: 1.6, marginBottom: 8 }}>{verdict.comentariu}</div>}
+                          {verdict.primulPasGresit && (
+                            <div style={{ fontSize: 11, color: "#C62828", marginBottom: 8, fontStyle: "italic" }}>
+                              ⚠️ Primul pas greșit: {verdict.primulPasGresit}
+                            </div>
+                          )}
+                          {verdict.indiciu && verdict.verdict !== "corect" && (
+                            <div style={{ background: "#fff", borderRadius: 6, padding: "8px 10px", fontSize: 12, color: "#555", borderLeft: "3px solid #C8A84B" }}>
+                              💡 <strong>Indiciu:</strong> {verdict.indiciu}
+                            </div>
+                          )}
+                          <button
+                            style={{ ...S.btnGray, marginTop: 10, width: "100%" }}
+                            onClick={() => toggleSolution(p.id)}
+                          >
+                            {revealed ? "🙈 Ascunde rezolvarea" : "👁️ Vezi rezolvarea oficială"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Solution */}
+                      {revealed && (
+                        <div style={{ background: "#F8F6F2", borderRadius: 10, padding: 14, marginTop: 4 }}>
+                          <div style={{ fontWeight: 800, fontSize: 12, color: "#C8A84B", marginBottom: 10, fontFamily: "'Syne',sans-serif", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                            ✏️ Rezolvare pas-cu-pas
+                          </div>
+                          {p.solutie.pasi.map((pas, i) => (
+                            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-start" }}>
+                              <div style={{ background: "#C8A84B", color: "#fff", borderRadius: "50%", minWidth: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+                                {i + 1}
+                              </div>
+                              <div style={{ fontSize: 13, color: "#1A1A1A", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{pas}</div>
+                            </div>
+                          ))}
+                          {p.solutie.raspunsFinal && (
+                            <div style={{ marginTop: 12, padding: "10px 12px", background: "#E8F5E9", border: "1px solid #A5D6A7", borderRadius: 8, fontSize: 13, color: "#2E7D32", fontWeight: 700 }}>
+                              <span style={{ fontFamily: "'Syne',sans-serif", textTransform: "uppercase", fontSize: 10, letterSpacing: "0.5px", display: "block", marginBottom: 4 }}>Răspuns final</span>
+                              {p.solutie.raspunsFinal}
+                            </div>
+                          )}
+                          {p.solutie.intuitie && (
+                            <div style={{ marginTop: 10, padding: "8px 12px", background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 8, fontSize: 12, color: "#7A5C00", lineHeight: 1.6, fontStyle: "italic" }}>
+                              💡 {p.solutie.intuitie}
+                            </div>
+                          )}
+                          {!verdict && (
+                            <button style={{ ...S.btnGray, marginTop: 12, width: "100%" }} onClick={() => toggleSolution(p.id)}>
+                              🙈 Ascunde rezolvarea
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
         )}
