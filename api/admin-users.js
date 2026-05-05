@@ -125,10 +125,9 @@ export default async function handler(req, res) {
     try {
       const { unlocked, gamification, chapters } = await getUserData(uid);
 
-      // Build chapter summary with screenshots
+      // Build chapter summary
       const chapterSummary = CHAPTER_IDS.map(id => {
         const data = chapters[id] || {};
-        const imgs = data.screenshots || (data.screenshot ? [data.screenshot] : []);
         return {
           id,
           subject: id.startsWith("r") ? "romana" : "matematica",
@@ -136,7 +135,6 @@ export default async function handler(req, res) {
           hasContent: !!data.content,
           quizResult: data.quizResult || null,
           quizAttempts: data.quizAttempts || 0,
-          screenshots: imgs,
           chatMessages: (data.chatHistory || []).filter(m => m.role === "user").length,
         };
       });
