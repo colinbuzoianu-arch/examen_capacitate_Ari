@@ -35,6 +35,5 @@ export const logger = {
     chapterId: chapter.id, chapterTitle: chapter.title, subject, score, passed, attempts: attemptNumber,
     answers: questions.map((q, i) => ({ question: q.question, correct: q.correct, given: answers[i] || null, isCorrect: answers[i] === q.correct, explanation: q.explanation })),
   }),
-  screenshotUploaded: (chapter, subject) => log("screenshot_uploaded", { chapterId: chapter.id, chapterTitle: chapter.title, subject }),
   chapterUnlocked:    (chapter, subject) => log("chapter_unlocked",    { chapterId: chapter.id, chapterTitle: chapter.title, subject }),
 };
