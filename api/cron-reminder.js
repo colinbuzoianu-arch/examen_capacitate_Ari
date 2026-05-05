@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     </div>
     <div style="background:#fff;margin:0 16px;border-radius:12px;padding:18px;">
       <p style="font-size:14px;color:#333;line-height:1.7;margin:0 0 14px;">
-        Nu uita că pentru a bifa un capitol trebuie <strong>quiz (minim 8/10)</strong> + <strong>screenshot</strong>.
+        Nu uita că pentru a bifa un capitol trebuie să treci <strong>quiz-ul cu minim 8/10</strong>.
       </p>
       <div style="display:flex;gap:10px;margin-bottom:16px;">
         <div style="flex:1;background:#FFF5F5;border-radius:10px;padding:10px;text-align:center;border:1px solid #FFCDD2;">

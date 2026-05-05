@@ -4,8 +4,8 @@ export const START_DATE  = new Date("2026-04-23");
 
 // App-level config — no personal data here
 export const CONFIG = {
-  appName:          "EN 2026",
-  adminPasswordB64: btoa("Babel2012"),
+  appName:          "Studiu EN26",
+  // Admin auth handled server-side via ADMIN_SECRET env var
   QUIZ_PASS_SCORE:  8,
 };
 

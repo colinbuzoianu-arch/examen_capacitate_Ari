@@ -8,7 +8,7 @@ import StudentApp from "./pages/StudentApp.jsx";
 import AdminApp from "./pages/AdminApp.jsx";
 
 function AppInner() {
-  const { user, token, loading, logout } = useAuth();
+  const { user, token, loading, dataReady, logout } = useAuth();
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [pw, setPw]     = useState("");
@@ -17,24 +17,34 @@ function AppInner() {
 
   // Sync token to cloudStorage + set logger user
   useEffect(() => { setAuthToken(token); }, [token]);
-  useEffect(() => { if (user?.name) setLoggerUser(user.name); }, [user]);
+  useEffect(() => { if (user?.name) setLoggerUser(user.name, user.userId); }, [user]);
 
   // Check admin session
   useEffect(() => {
     if (sessionStorage.getItem("en2026_admin") === "1") setAdminUnlocked(true);
   }, []);
 
-  function loginAdmin() {
-    if (btoa(pw) === CONFIG.adminPasswordB64) {
-      sessionStorage.setItem("en2026_admin", "1");
-      setAdminUnlocked(true);
-      setMode("admin");
-      setShowAdminLogin(false);
-      setPw(""); setPwErr(false);
-    } else { setPwErr(true); setPw(""); }
+  async function loginAdmin() {
+    // Verify password server-side — never compare passwords in the browser
+    try {
+      const token = btoa(pw);
+      const res = await fetch("/api/admin-users?mode=list", {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (res.ok) {
+        sessionStorage.setItem("en2026_admin", "1");
+        sessionStorage.setItem("en2026_admin_token", token);
+        setAdminUnlocked(true);
+        setMode("admin");
+        setShowAdminLogin(false);
+        setPw(""); setPwErr(false);
+      } else {
+        setPwErr(true); setPw("");
+      }
+    } catch { setPwErr(true); setPw(""); }
   }
 
-  if (loading) return <Loader />;
+  if (loading || !dataReady) return <Loader />;
   if (!user)   return <AuthPage />;
 
   return (

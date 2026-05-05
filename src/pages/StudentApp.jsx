@@ -41,14 +41,12 @@ export default function StudentApp() {
       let recovered = { ...(saved || {}) };
       let didRecover = false;
 
-      // Auto-recover: check each chapter's cloud data
-      // If quiz passed + screenshot exist but not in unlocked → add it
+      // Auto-recover: if quiz passed but not in unlocked → add it
       await Promise.all(allChapters.map(async (ch) => {
         if (!recovered[ch.id]) {
           try {
             const chapData = await cloudGet(`chapter_${ch.id}`);
-            const hasProof = chapData?.screenshot || (chapData?.screenshots && chapData.screenshots.length > 0);
-            if (chapData?.quizResult?.passed && hasProof) {
+            if (chapData?.quizResult?.passed) {
               recovered[ch.id] = true;
               didRecover = true;
             }
@@ -66,17 +64,15 @@ export default function StudentApp() {
     // Inline resync — fixes badges missed due to bugs
     const state = getGamState();
     const allIds = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
-    let quizzesPassed = 0, perfectQuizzes = 0, screenshots = 0;
+    let quizzesPassed = 0, perfectQuizzes = 0;
     allIds.forEach(id => {
       const ch = ls.get(`chapter_${id}`) || {};
       if (ch.quizResult?.passed) quizzesPassed++;
       if (ch.quizResult?.score === 10) perfectQuizzes++;
-      if (ch.screenshot || ch.screenshots?.length) screenshots++;
     });
     let changed = false;
     if (quizzesPassed > (state.quizzesPassed || 0)) { state.quizzesPassed = quizzesPassed; changed = true; }
     if (perfectQuizzes > (state.perfectQuizzes || 0)) { state.perfectQuizzes = perfectQuizzes; changed = true; }
-    if (screenshots > (state.screenshots || 0)) { state.screenshots = screenshots; changed = true; }
     if (changed) {
       const newBadges = BADGES.filter(b => !state.unlockedBadges.includes(b.id) && b.condition(state));
       newBadges.forEach(b => {
@@ -287,7 +283,12 @@ function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedC
           const p = Math.round((done / total) * 100);
           const color = s === "romana" ? "#C8392B" : "#1A5276";
           return (
-            <div key={s} style={S.subCard}>
+            <div key={s} style={{ ...S.subCard, cursor: "pointer" }}
+              onClick={() => {
+                // Deschide primul capitol nebifat din subiectul respectiv
+                const firstChap = sub.chapters.find(c => !unlockedChapters[c.id]) || sub.chapters[0];
+                setOpen({ chapterId: firstChap.id, subject: s });
+              }}>
               <div style={S.subIcon}>{sub.icon}</div>
               <div style={{ ...S.subName, color }}>{sub.short}</div>
               <div style={S.subStat}>{done} / {total}</div>
@@ -320,7 +321,6 @@ function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedC
                   <div style={{ flex: 1, fontSize: 13, color: done ? "#2E7D32" : "#1A1A1A", fontWeight: 600, fontFamily: "'Inter',sans-serif" }}>{ch.title}</div>
                   <div style={{ display: "flex", gap: 4 }}>
                     <MiniTag done={!!chapData.quizResult?.passed} label="Quiz" />
-                    <MiniTag done={!!chapData.screenshot} label="📸" />
                   </div>
                   <span style={{ color: "#CCC", fontSize: 16, marginLeft: 4 }}>›</span>
                 </div>
@@ -337,14 +337,13 @@ function Dashboard({ pct, doneAll, totalAll, doneOf, totalOf, setView, unlockedC
           ["📚", "Citești lecția generată de AI"],
           ["💬", "Întrebi tutorele ce nu înțelegi"],
           ["🧠", "Treci quiz-ul cu minim 8 din 10"],
-          ["📸", "Încarci o poză cu temele"],
         ].map(([icon, text], i) => (
           <div key={i} style={S.howStep}>
             <div style={S.howNum}>{i + 1}</div>
             <div style={S.howText}>{icon} {text}</div>
           </div>
         ))}
-        <div style={S.howNote}>→ Ai nevoie de AMBELE: quiz trecut + screenshot!</div>
+        <div style={S.howNote}>→ Treci quiz-ul ca să bifezi capitolul!</div>
       </div>
     </div>
   );
@@ -405,7 +404,6 @@ function Plan({ activeWeek, setActiveWeek, unlockedChapters, setOpen }) {
                   <div style={{ display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap" }}>
                     <MiniTag done={!!chapData.content} label="Lecție" />
                     <MiniTag done={!!chapData.quizResult?.passed} label={`Quiz${chapData.quizResult?.passed ? " ✓" : ""}`} activeColor="#C8A84B" />
-                    <MiniTag done={!!chapData.screenshot} label="📸" activeColor="#2E7D32" />
                     <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, background: bgLight, color, fontFamily: "'Inter',sans-serif", fontWeight: 600 }}>
                       {sub.short}
                     </span>
@@ -450,7 +448,6 @@ function Progress({ doneOf, totalOf, unlockedChapters, setOpen }) {
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: isDone ? "#2E7D32" : "#1A1A1A", fontFamily: "'Inter',sans-serif" }}>{ch.title}</span>
                     <div style={{ display: "flex", gap: 4 }}>
                       <MiniTag done={!!chapData.quizResult?.passed} label="Q" />
-                      <MiniTag done={!!chapData.screenshot} label="📸" />
                     </div>
                   </div>
                 );

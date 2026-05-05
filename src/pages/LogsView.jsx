@@ -6,7 +6,9 @@ const EVENT_META = {
   chat_message:      { icon: "💬", label: "Întrebare tutore",   color: "#9C6FE4", bg: "#F3EEFF" },
   quiz_started:      { icon: "🧠", label: "Quiz început",       color: "#FF8A65", bg: "#FFF3EF" },
   quiz_submitted:    { icon: "📝", label: "Quiz trimis",        color: "#FF8A65", bg: "#FFF3EF" },
-  screenshot_uploaded:{ icon:"📸", label: "Screenshot urcat",  color: "#52A852", bg: "#EAF5EA" },
+  essay_evaluated:   { icon: "📝", label: "Compunere evaluată",  color: "#9C6FE4", bg: "#F3EEFF" },
+  math_problems_generated: { icon: "🧮", label: "Probleme generate", color: "#1A5276", bg: "#EEF4FF" },
+  math_solution_evaluated: { icon: "✍️", label: "Rezolvare verificată", color: "#1A5276", bg: "#EEF4FF" },
   chapter_unlocked:  { icon: "🏆", label: "Capitol bifat!",     color: "#C8A84B", bg: "#FFF8E7" },
 };
 
@@ -28,16 +30,48 @@ export default function LogsView() {
   const [tab, setTab]           = useState("feed"); // feed | quiz | chat
 
   async function apiFetch(params) {
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(`/api/get-logs?${qs}`);
+    // Map old modes to new admin-users endpoint modes
+    const modeMap = { days: "log-days" };
+    const mapped = { ...params };
+    if (mapped.mode && modeMap[mapped.mode]) mapped.mode = modeMap[mapped.mode];
+    else if (!mapped.mode) mapped.mode = "all-logs";
+    const qs = new URLSearchParams(mapped).toString();
+    const res = await fetch(`/api/admin-users?${qs}`, {
+      headers: { Authorization: `Bearer ${sessionStorage.getItem("en2026_admin_token") || ""}` },
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${res.status}`);
     }
-    return res.json();
+    const data = await res.json();
+    if (mapped.mode === "log-days") return { days: data.days || [] };
+    return data;
   }
 
-  // Load available days on mount
+  // Build quiz stats map from an array of logs (most recent attempt per chapter wins)
+  function buildStats(logList) {
+    const map = {};
+    // logs arrive newest-first from LPUSH; first seen per chapter = most recent
+    for (const l of logList) {
+      if (l.type !== "quiz_submitted") continue;
+      const key = l.chapterId || "unknown";
+      if (!map[key]) {
+        map[key] = {
+          chapterId:    l.chapterId,
+          chapterTitle: l.chapterTitle,
+          subject:      l.subject,
+          score:        l.score ?? 0,
+          passed:       !!l.passed,
+          answers:      l.answers || [],
+          attempts:     l.attempts || 1,
+          lastAttempt:  l.ts,
+        };
+      }
+    }
+    return map;
+  }
+
+  // Load available days on mount — one Redis call
   useEffect(() => {
     (async () => {
       try {
@@ -45,8 +79,6 @@ export default function LogsView() {
         const { days: d } = await apiFetch({ mode: "days" });
         setDays(d || []);
         if (d && d.length > 0) setSelDay(d[0]);
-        const { stats: s } = await apiFetch({ mode: "stats" });
-        setStats(s || {});
       } catch (e) {
         console.error("LogsView fetch error:", e);
         setFetchError(e.message);
@@ -54,14 +86,15 @@ export default function LogsView() {
     })();
   }, []);
 
-  // Load logs when day changes
+  // Load logs when day changes — one Redis call, stats derived client-side
   useEffect(() => {
     if (!selectedDay) return;
     (async () => {
       setLoading(true);
       try {
         const { logs: l } = await apiFetch({ day: selectedDay });
-        setLogs((l || []).reverse()); // chronological order
+        setLogs((l || []).reverse()); // chronological for feed
+        setStats(buildStats(l || [])); // derive quiz stats — no extra API call
       } catch {}
       setLoading(false);
     })();
@@ -177,7 +210,7 @@ export default function LogsView() {
                       </button>
                       {isExp && (
                         <div style={{ ...S.chatPreview, background: "#F8F6F2", borderColor: "#E8E4DC", marginTop: 4 }}>
-                          <span style={{ color: "#C8A84B", fontWeight: 600 }}>Claude:</span> {log.aiReply}
+                          <span style={{ color: "#C8A84B", fontWeight: 600 }}>Aplicația:</span> {log.aiReply}
                         </div>
                       )}
                     </div>
@@ -274,7 +307,7 @@ export default function LogsView() {
                   {log.userMessage}
                 </div>
                 <div style={S.chatBubbleAI}>
-                  <span style={{ fontSize: 10, color: "#C8A84B", fontWeight: 700, display: "block", marginBottom: 3 }}>Claude a răspuns:</span>
+                  <span style={{ fontSize: 10, color: "#C8A84B", fontWeight: 700, display: "block", marginBottom: 3 }}>Aplicația a răspuns:</span>
                   {log.aiReply}
                 </div>
               </div>

@@ -1,14 +1,26 @@
 // All AI calls go through /api/claude (serverless, keeps API key secret)
 
+// ── Auth token helper ─────────────────────────────────────────────────────────
+function getAuthToken() {
+  return localStorage.getItem("en2026_token") || "";
+}
+
 // ── Core call ────────────────────────────────────────────────────────────────
-async function aiCallOnce(messages, system = "", max_tokens = 2000, fast = false) {
+async function aiCallOnce(messages, system = "", max_tokens = 2000, fast = false, interactionType = "chat") {
+  const token = getAuthToken();
   const res = await fetch("/api/claude", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, system, max_tokens, fast }),
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ messages, system, max_tokens, fast, interactionType }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 429 && err.error === "limit_reached") {
+      throw new Error(`LIMIT_REACHED:${err.message}`);
+    }
     throw new Error(err.error || `HTTP ${res.status}`);
   }
   const data = await res.json();
@@ -18,21 +30,21 @@ async function aiCallOnce(messages, system = "", max_tokens = 2000, fast = false
 }
 
 // Fast call — uses Haiku model, much faster for structured tasks like quiz
-export async function aiCallFast(messages, system = "", max_tokens = 1800) {
-  return aiCallOnce(messages, system, max_tokens, true);
+export async function aiCallFast(messages, system = "", max_tokens = 1800, interactionType = "quiz") {
+  return aiCallOnce(messages, system, max_tokens, true, interactionType);
 }
 
 // Retry wrapper — tries up to `attempts` times with exponential backoff
-export async function aiCall(messages, system = "", max_tokens = 2000, attempts = 3) {
+export async function aiCall(messages, system = "", max_tokens = 2000, attempts = 3, interactionType = "chat") {
   let lastError;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await aiCallOnce(messages, system, max_tokens, false);
+      return await aiCallOnce(messages, system, max_tokens, false, interactionType);
     } catch (err) {
       lastError = err;
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
       console.warn(`aiCall attempt ${i + 1} failed:`, err.message);
       if (i < attempts - 1) {
-        // Wait before retry: 1s, 2s, 4s
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
       }
     }
@@ -41,81 +53,41 @@ export async function aiCall(messages, system = "", max_tokens = 2000, attempts 
 }
 
 // ── Robust JSON extractor ─────────────────────────────────────────────────────
-// Handles cases where Claude wraps JSON in markdown, adds preamble, etc.
 function extractJSON(raw) {
   if (!raw) throw new Error("Empty response");
-
-  // 1. Strip markdown code blocks
   let clean = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-
-  // 2. Try direct parse first
   try { return JSON.parse(clean); } catch {}
-
-  // 3. Find first { and last } — extract the JSON object
   const start = clean.indexOf("{");
   const end   = clean.lastIndexOf("}");
   if (start !== -1 && end !== -1 && end > start) {
     try { return JSON.parse(clean.slice(start, end + 1)); } catch {}
   }
-
-  // 4. Find first [ and last ] — extract JSON array
   const aStart = clean.indexOf("[");
   const aEnd   = clean.lastIndexOf("]");
   if (aStart !== -1 && aEnd !== -1 && aEnd > aStart) {
     try { return JSON.parse(clean.slice(aStart, aEnd + 1)); } catch {}
   }
-
   throw new Error("Could not extract valid JSON from response");
 }
 
 // ── Generate chapter explanation ──────────────────────────────────────────────
 export async function generateChapterContent(chapter) {
-  const system = `Ești un tutore expert pentru elevii de clasa a VIII-a din România care se pregătesc pentru Evaluarea Națională 2026.
-Răspunde ÎNTOTDEAUNA în română. Fii clar, prietenos și adaptat nivelului unui elev de 14 ani.
-Folosește exemple concrete, mnemonice și exerciții scurte. Structurează răspunsul cu titluri clare.`;
+  const system = `Ești un tutore expert pentru elevii de clasa a VIII-a din România care se pregătesc pentru Evaluarea Națională 2026.\nRăspunde ÎNTOTDEAUNA în română. Fii clar, prietenos și adaptat nivelului unui elev de 14 ani.\nFolosește exemple concrete, mnemonice și exerciții scurte. Structurează răspunsul cu titluri clare.`;
 
-  const prompt = `Creează un rezumat educațional complet pentru capitolul: "${chapter.title}".
+  const prompt = `Creează un rezumat educațional complet pentru capitolul: "${chapter.title}".\n\nContext capitol: ${chapter.aiContext}\n\nStructurează astfel:\n## Ce vei învăța\n(2-3 propoziții despre importanța capitolului la EN)\n\n## Concepte cheie\n(explică fiecare concept principal clar și simplu, cu exemple)\n\n## Reguli de reținut\n(bullets cu regulile esențiale, formule, definiții)\n\n## Exemplu rezolvat\n(un exercițiu/problemă tip EN complet rezolvat pas cu pas)\n\n## Greșeli frecvente\n(2-3 greșeli tipice și cum să le eviți)\n\nFii concis dar complet. Maxim 600 cuvinte.`;
 
-Context capitol: ${chapter.aiContext}
-
-Structurează astfel:
-## Ce vei învăța
-(2-3 propoziții despre importanța capitolului la EN)
-
-## Concepte cheie
-(explică fiecare concept principal clar și simplu, cu exemple)
-
-## Reguli de reținut
-(bullets cu regulile esențiale, formule, definiții)
-
-## Exemplu rezolvat
-(un exercițiu/problemă tip EN complet rezolvat pas cu pas)
-
-## Greșeli frecvente
-(2-3 greșeli tipice și cum să le eviți)
-
-Fii concis dar complet. Maxim 600 cuvinte.`;
-
-  return aiCall([{ role: "user", content: prompt }], system, 2000, 3);
+  return aiCall([{ role: "user", content: prompt }], system, 2000, 3, "lesson");
 }
 
 // ── Generate quiz ─────────────────────────────────────────────────────────────
-// Uses claude-haiku for speed (fits in Vercel 10s free tier limit)
 export async function generateQuiz(chapter) {
   const system = `EN VIII examinator. Răspunde DOAR cu JSON valid, fără text extra.`;
 
-  // Compact prompt — fewer tokens = faster response
-  const prompt = `Quiz 10 întrebări pentru "${chapter.title}" (EN VIII România).
-Teme: ${chapter.topics ? chapter.topics.join(", ") : chapter.aiContext.slice(0, 200)}
-
-JSON STRICT (nimic altceva):
-{"questions":[{"id":1,"question":"...","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","explanation":"..."}]}
-
-Reguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație scurtă max 15 cuvinte.`;
+  const prompt = `Quiz 10 întrebări pentru "${chapter.title}" (EN VIII România).\nTeme: ${chapter.topics ? chapter.topics.join(", ") : chapter.aiContext.slice(0, 200)}\n\nJSON STRICT (nimic altceva):\n{"questions":[{"id":1,"question":"...","options":["A) ...","B) ...","C) ...","D) ..."],"correct":"A","explanation":"..."}]}\n\nReguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație scurtă max 15 cuvinte.`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const raw = await aiCallFast([{ role: "user", content: prompt }], system, 1800);
+      const raw = await aiCallFast([{ role: "user", content: prompt }], system, 1800, "quiz");
       const parsed = extractJSON(raw);
 
       if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length < 5) {
@@ -133,6 +105,7 @@ Reguli: 10 întrebări, română, correct=litera singură A/B/C/D, explicație s
 
       return parsed;
     } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
       console.warn(`Quiz attempt ${attempt}/2:`, err.message);
       if (attempt === 2) throw new Error("Nu s-a putut genera quiz-ul. Încearcă din nou.");
       await new Promise(r => setTimeout(r, 1000));
@@ -154,44 +127,263 @@ export async function evaluateQuiz(chapter, questions, answers, userName = "tu")
 
   const score = summary.filter(s => s.corect).length;
 
-  const prompt = `${userName} a terminat quiz-ul la capitolul "${chapter.title}". Scor: ${score}/10.
+  const prompt = `${userName} a terminat quiz-ul la capitolul "${chapter.title}". Scor: ${score}/10.\n\nRăspunsurile lui:\n${JSON.stringify(summary, null, 2)}\n\nScrie un feedback personalizat de 3-4 propoziții:\n1. Felicită-l/felicit-o dacă a trecut (${score >= 8 ? "DA, a trecut" : "NU, nu a trecut"})\n2. Menționează 1-2 greșeli specifice pe care să le revadă\n3. Încurajare pentru continuare\n4. Dacă nu a trecut, spune-i ce capitol să revadă\n\nFii cald, direct și motivant. Maxim 80 cuvinte.`;
 
-Răspunsurile lui:
-${JSON.stringify(summary, null, 2)}
-
-Scrie un feedback personalizat de 3-4 propoziții:
-1. Felicită-l/felicit-o dacă a trecut (${score >= 8 ? "DA, a trecut" : "NU, nu a trecut"})
-2. Menționează 1-2 greșeli specifice pe care să le revadă
-3. Încurajare pentru continuare
-4. Dacă nu a trecut, spune-i ce capitol să revadă
-
-Fii cald, direct și motivant. Maxim 80 cuvinte.`;
-
-  const feedback = await aiCall([{ role: "user", content: prompt }], system, 500, 3);
+  const feedback = await aiCall([{ role: "user", content: prompt }], system, 500, 3, "chat");
   return { score, passed: score >= 8, feedback };
 }
 
 // ── Chapter chat ──────────────────────────────────────────────────────────────
 export async function chatWithTutor(chapter, history, userMessage, userName = "elev") {
-  const system = `Ești tutorele unui elev de clasa a VIII-a care se pregătește pentru Evaluarea Națională 2026.
-Nume elev: ${userName}.
-Îl ajuți să se pregătească pentru Evaluarea Națională 2026.
-Capitolul curent: "${chapter.title}".
-Context: ${chapter.aiContext}
-
-Reguli:
-- Răspunde ÎNTOTDEAUNA în română
-- Fii prietenos, clar, adaptat nivelului de clasa a VIII-a
-- Dacă întreabă ceva în afara capitolului, redirecționează-l blând
-- Dă exemple concrete și practice
-- Maxim 150 cuvinte per răspuns`;
+  const system = `Ești tutorele unui elev de clasa a VIII-a care se pregătește pentru Evaluarea Națională 2026.\nNume elev: ${userName}.\nÎl ajuți să se pregătească pentru Evaluarea Națională 2026.\nCapitolul curent: "${chapter.title}".\nContext: ${chapter.aiContext}\n\nReguli:\n- Răspunde ÎNTOTDEAUNA în română\n- Fii prietenos, clar, adaptat nivelului de clasa a VIII-a\n- Dacă întreabă ceva în afara capitolului, redirecționează-l blând\n- Dă exemple concrete și practice\n- Maxim 150 cuvinte per răspuns`;
 
   const messages = [
     ...history,
     { role: "user", content: userMessage },
   ];
 
-  return aiCall(messages, system, 600, 3);
+  return aiCall(messages, system, 600, 3, "chat");
+}
+
+// ── ROMÂNĂ: Generate essay prompt (EN VIII Subiectul II style) ────────────────
+// Returns: { tip, tema, cerinta, criterii: [{nume, punctaj}], lungimeMin, lungimeMax }
+export async function generateEssayPrompt(chapter) {
+  const system = `EN VIII examinator pentru Limba și literatura română. Răspunde DOAR cu JSON valid, fără text extra.`;
+
+  const prompt = `Generează o cerință de redactare pentru Subiectul II al EN VIII pe tema capitolului "${chapter.title}".
+Context: ${chapter.aiContext}
+
+Lungimea TREBUIE să fie strict 150-300 cuvinte (regula EN VIII Subiectul II).
+Tipul textului trebuie să se potrivească cu capitolul:
+- "narativ" pentru capitole de text narativ literar
+- "descriptiv" pentru text descriptiv/liric
+- "argumentativ" pentru text argumentativ
+- pentru morfologie/sintaxă/fonetică/vocabular alege "argumentativ" cu temă potrivită
+- pentru redactare alege orice tip e mai relevant
+
+JSON STRICT (nimic altceva):
+{
+  "tip": "narativ|descriptiv|argumentativ",
+  "tema": "Tema scurtă a compunerii (5-10 cuvinte)",
+  "cerinta": "Cerința completă, în 1-2 fraze, exact cum apare la EN VIII (ex: 'Redactează un text de minimum 150 de cuvinte și maximum 300 de cuvinte în care să...').",
+  "lungimeMin": 150,
+  "lungimeMax": 300,
+  "indicatii": ["3-4 indicații concrete despre ce trebuie să conțină textul"]
+}`;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const raw = await aiCallFast([{ role: "user", content: prompt }], system, 800, "chat");
+      const parsed = extractJSON(raw);
+      if (!parsed.cerinta || !parsed.tip) throw new Error("Structură invalidă");
+      return {
+        tip: parsed.tip,
+        tema: parsed.tema || "",
+        cerinta: parsed.cerinta,
+        lungimeMin: parsed.lungimeMin || 150,
+        lungimeMax: parsed.lungimeMax || 300,
+        indicatii: Array.isArray(parsed.indicatii) ? parsed.indicatii.slice(0, 5) : [],
+      };
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
+      if (attempt === 2) throw new Error("Nu s-a putut genera cerința. Încearcă din nou.");
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+}
+
+// ── ROMÂNĂ: Evaluate student essay against EN VIII rubric ─────────────────────
+// Returns: { score (0-10), criterii: [{nume, punctaj, maxim, comentariu}], puncteforte: [], deImbunatatit: [], rescrieri: [{original, sugestie}] }
+export async function evaluateEssay(chapter, essayPrompt, essayText, userName = "elevul") {
+  const system = `Ești profesor de limba română evaluator EN VIII. Aplici baremul oficial cu rigoare, dar oferi feedback constructiv.
+Răspunde DOAR cu JSON valid, fără text extra.`;
+
+  const wordCount = essayText.trim().split(/\s+/).filter(Boolean).length;
+  const lengthOk = wordCount >= essayPrompt.lungimeMin && wordCount <= essayPrompt.lungimeMax;
+
+  const prompt = `Evaluează compunerea de mai jos după baremul EN VIII Subiectul II (16 puncte total, mapat apoi la nota /10).
+
+CERINȚA dată elevului:
+"${essayPrompt.cerinta}"
+Tip: ${essayPrompt.tip}
+Lungime cerută: ${essayPrompt.lungimeMin}-${essayPrompt.lungimeMax} cuvinte
+Lungime efectivă: ${wordCount} cuvinte ${lengthOk ? "(în limită ✓)" : "(ÎN AFARA LIMITEI — penalizează la criteriul lizibilitate/redactare)"}
+
+TEXTUL ELEVULUI:
+"""
+${essayText}
+"""
+
+BAREM EN VIII (puncte maxime per criteriu):
+1. "continut" (4p): respectă cerința, idei clare, dezvoltare adecvată tipului de text
+2. "structura" (3p): introducere/cuprins/concluzie, coerență, paragrafe
+3. "stil" (3p): registru adecvat, vocabular variat, figuri de stil dacă tipul cere
+4. "ortografie" (3p): scădere -0.5p per greșeală gravă, max -3p
+5. "redactare" (3p): lizibilitate, lungime în limită, punctuație, aranjarea în pagină
+
+JSON STRICT (nimic altceva):
+{
+  "criterii": [
+    {"nume": "continut", "punctaj": 0-4, "maxim": 4, "comentariu": "1-2 propoziții specifice"},
+    {"nume": "structura", "punctaj": 0-3, "maxim": 3, "comentariu": "..."},
+    {"nume": "stil", "punctaj": 0-3, "maxim": 3, "comentariu": "..."},
+    {"nume": "ortografie", "punctaj": 0-3, "maxim": 3, "comentariu": "..."},
+    {"nume": "redactare", "punctaj": 0-3, "maxim": 3, "comentariu": "..."}
+  ],
+  "puncteforte": ["2-3 lucruri pe care ${userName} le-a făcut bine"],
+  "deImbunatatit": ["2-3 lucruri concrete de îmbunătățit"],
+  "rescrieri": [
+    {"original": "fraza din text exact cum a scris-o elevul", "sugestie": "varianta îmbunătățită"}
+  ]
+}
+
+Reguli:
+- Scor pe criterii suma maxim 16
+- 1-3 rescrieri concrete (alege cele mai problematice fraze)
+- Comentariile să fie specifice, NU generice
+- Limba română corectă, cu diacritice`;
+
+  const raw = await aiCall([{ role: "user", content: prompt }], system, 2000, 3, "chat");
+  const parsed = extractJSON(raw);
+
+  // Defensive: compute total from criteria
+  const criterii = (parsed.criterii || []).map(c => ({
+    nume: c.nume || "",
+    punctaj: Math.max(0, Math.min(c.maxim || 4, Number(c.punctaj) || 0)),
+    maxim: c.maxim || 4,
+    comentariu: c.comentariu || "",
+  }));
+  const totalP = criterii.reduce((s, c) => s + c.punctaj, 0);
+  const score = Math.round((totalP / 16) * 10 * 10) / 10; // /10 cu o zecimală
+
+  return {
+    score,
+    totalP,
+    maxP: 16,
+    wordCount,
+    lengthOk,
+    criterii,
+    puncteforte: Array.isArray(parsed.puncteforte) ? parsed.puncteforte.slice(0, 5) : [],
+    deImbunatatit: Array.isArray(parsed.deImbunatatit) ? parsed.deImbunatatit.slice(0, 5) : [],
+    rescrieri: Array.isArray(parsed.rescrieri) ? parsed.rescrieri.slice(0, 3) : [],
+  };
+}
+
+// ── MATE: Generate 3 model problems with stepped solutions ────────────────────
+// Returns: { problems: [{id, dificultate, enunt, solutie: {pasi: [], raspunsFinal, intuitie}}] }
+export async function generateMathProblems(chapter) {
+  const system = `Ești profesor de matematică, autor de probleme pentru EN VIII. Răspunde DOAR cu JSON valid, fără text extra.`;
+
+  const prompt = `Generează 3 probleme model pentru capitolul "${chapter.title}" la EN VIII.
+Context: ${chapter.aiContext}
+
+Una ușoară (Subiectul I), una medie (Subiectul II), una grea (Subiectul III).
+Fiecare cu rezolvare completă în pași justificați.
+
+JSON STRICT (nimic altceva):
+{
+  "problems": [
+    {
+      "id": 1,
+      "dificultate": "ușor",
+      "enunt": "Enunțul complet, cu date numerice concrete",
+      "solutie": {
+        "pasi": [
+          "Pasul 1: ce facem și de ce",
+          "Pasul 2: ...",
+          "Pasul 3: ..."
+        ],
+        "raspunsFinal": "Rezultatul final, scris clar",
+        "intuitie": "1-2 propoziții despre cum să gândești problema"
+      }
+    },
+    {"id": 2, "dificultate": "mediu", ...},
+    {"id": 3, "dificultate": "greu", ...}
+  ]
+}
+
+Reguli:
+- Probleme realistice tip EN VIII
+- Pașii să fie clari, fiecare cu o singură idee
+- Notație matematică în text simplu (ex: x^2, sqrt(2), nu LaTeX)
+- Răspuns final identificabil clar
+- 3-7 pași per problemă`;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const raw = await aiCall([{ role: "user", content: prompt }], system, 2500, 2, "lesson");
+      const parsed = extractJSON(raw);
+      if (!parsed.problems || !Array.isArray(parsed.problems) || parsed.problems.length < 1) {
+        throw new Error("Structură invalidă");
+      }
+      return {
+        problems: parsed.problems.slice(0, 3).map((p, i) => ({
+          id: i + 1,
+          dificultate: p.dificultate || (i === 0 ? "ușor" : i === 1 ? "mediu" : "greu"),
+          enunt: p.enunt || "",
+          solutie: {
+            pasi: Array.isArray(p.solutie?.pasi) ? p.solutie.pasi : [],
+            raspunsFinal: p.solutie?.raspunsFinal || "",
+            intuitie: p.solutie?.intuitie || "",
+          },
+        })),
+      };
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
+      if (attempt === 2) throw new Error("Nu s-au putut genera problemele. Încearcă din nou.");
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+}
+
+// ── MATE: Evaluate student's solution attempt ─────────────────────────────────
+// Returns: { verdict: "corect"|"partial"|"gresit", scor (0-3), comentariu, indiciu, primulPasGresit }
+export async function evaluateMathSolution(problem, studentSolution, userName = "elevul") {
+  const system = `Ești profesor de matematică EN VIII. Evaluezi rezolvări scrise de elevi cu rigoare și empatie.
+Acorzi punctaj parțial pentru pași corecți chiar dacă răspunsul final e greșit (cum se face la EN VIII).
+Răspunde DOAR cu JSON valid, fără text extra.`;
+
+  const prompt = `Evaluează rezolvarea elevului ${userName} pentru problema de mai jos.
+
+PROBLEMĂ:
+${problem.enunt}
+
+REZOLVARE OFICIALĂ (referință):
+Pași: ${problem.solutie.pasi.join(" | ")}
+Răspuns final: ${problem.solutie.raspunsFinal}
+
+REZOLVAREA ELEVULUI:
+"""
+${studentSolution}
+"""
+
+JSON STRICT (nimic altceva):
+{
+  "verdict": "corect|partial|gresit",
+  "scor": 0-3,
+  "comentariu": "2-3 propoziții care explică ce a făcut bine și ce nu",
+  "primulPasGresit": "dacă există, descrierea primului pas greșit; altfel ''",
+  "indiciu": "un indiciu concret pentru a continua corect (NU rezolvarea completă)"
+}
+
+Reguli pentru scor:
+- 3 = răspuns final corect cu pași complet justificați
+- 2 = răspuns final corect dar cu unele lacune sau notație greșită; SAU pași corecți cu o singură eroare de calcul finală
+- 1 = pași inițiali corecți dar abandonează sau greșește mediocru
+- 0 = abordare complet greșită sau nimic relevant
+
+Fii cald și încurajator, dar onest. Nu da rezolvarea completă în "indiciu" — doar direcția.`;
+
+  const raw = await aiCall([{ role: "user", content: prompt }], system, 800, 3, "chat");
+  const parsed = extractJSON(raw);
+
+  return {
+    verdict: ["corect", "partial", "gresit"].includes(parsed.verdict) ? parsed.verdict : "partial",
+    scor: Math.max(0, Math.min(3, Number(parsed.scor) || 0)),
+    comentariu: parsed.comentariu || "",
+    primulPasGresit: parsed.primulPasGresit || "",
+    indiciu: parsed.indiciu || "",
+  };
 }
 
 // ── Email send ────────────────────────────────────────────────────────────────

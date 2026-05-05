@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 import { cloudGet, cloudSet } from "../utils/cloudStorage.js";
 import { ls } from "../utils/storage.js";
-import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor } from "../utils/api.js";
+import { generateChapterContent, generateQuiz, evaluateQuiz, chatWithTutor, generateEssayPrompt, evaluateEssay, generateMathProblems, evaluateMathSolution } from "../utils/api.js";
 import { SUBJECTS, CONFIG } from "../constants.js";
 import { logger } from "../utils/logger.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import { recordContentRead, recordChatMessage, recordQuizAttempt, recordScreenshot } from "../utils/gamification.js";
+import UpgradeModal from "./UpgradeModal.jsx";
+import { recordContentRead, recordChatMessage, recordQuizAttempt } from "../utils/gamification.js";
+import { trackFeature } from "../utils/featureTracking.js";
 
 export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlock }) {
   const { user } = useAuth();
   const sub      = SUBJECTS[subject];
-  const chapter  = sub.chapters.find(c => c.id === chapterId);
+  const chapter  = sub?.chapters?.find(c => c.id === chapterId);
   const storageKey = `chapter_${chapterId}`;
   const cloudKey   = `chapter_${chapterId}`;
 
@@ -35,19 +37,28 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   const [answers, setAnswers]         = useState(() => (ls.get(storageKey) || {}).quizAnswers || {});
   const [quizResult, setQuizResult]   = useState(() => (ls.get(storageKey) || {}).quizResult || null);
   const [evaluating, setEvaluating]   = useState(false);
+  const [upgradeModal, setUpgradeModal] = useState(null);
 
-  const [screenshots, setScreenshots] = useState(() => {
-    const s = ls.get(storageKey) || {};
-    if (s.screenshots?.length) return s.screenshots;
-    if (s.screenshot)          return [s.screenshot];
-    return [];
-  });
-  const fileRef = useRef();
+  // ── ESSAY (Romanian only) ──────────────────────────────────────────────────
+  const [essayPrompt, setEssayPrompt] = useState(() => (ls.get(storageKey) || {}).essayPrompt || null);
+  const [essayText, setEssayText]     = useState(() => (ls.get(storageKey) || {}).essayText || "");
+  const [essayResult, setEssayResult] = useState(() => (ls.get(storageKey) || {}).essayResult || null);
+  const [loadingEssayPrompt, setLEP]  = useState(false);
+  const [evaluatingEssay, setEvalEssay] = useState(false);
+  const [essayError, setEssayError]   = useState(null);
+
+  // ── MATH PROBLEMS (Math only) ──────────────────────────────────────────────
+  const [mathProblems, setMathProblems] = useState(() => (ls.get(storageKey) || {}).mathProblems || null);
+  const [loadingProblems, setLPB]       = useState(false);
+  const [problemsError, setProblemsError] = useState(null);
+  const [revealedSolutions, setRevealed]  = useState({}); // { problemId: true }
+  const [studentSolutions, setStudentSol] = useState({}); // { problemId: "text" }
+  const [solutionVerdicts, setVerdicts]   = useState({}); // { problemId: { verdict, scor, comentariu, indiciu } }
+  const [evalProblemId, setEvalPid]       = useState(null); // which problem is being evaluated
 
   // ── DERIVED ────────────────────────────────────────────────────────────────
-  const quizPassed    = quizResult?.passed || saved.quizResult?.passed;
-  const hasScreenshot = screenshots.length > 0;
-  const isUnlocked    = quizPassed && hasScreenshot;
+  const quizPassed = quizResult?.passed || saved.quizResult?.passed;
+  const isUnlocked = quizPassed;
 
   // ── PERSIST ────────────────────────────────────────────────────────────────
   function persist(patch) {
@@ -62,10 +73,17 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   useEffect(() => { savedRef.current = saved; }, [saved]);
 
   // ── EFFECTS ────────────────────────────────────────────────────────────────
-  // Load from cloud on mount
+  // Load from cloud on mount — with 5s timeout fallback
   useEffect(() => {
+    if (!chapter || !sub) return;
     logger.chapterOpened(chapter, subject);
+    const timeout = setTimeout(() => {
+      // If cloud takes too long, proceed with localStorage data
+      setCloudLoaded(true);
+    }, 1500);
+
     cloudGet(cloudKey).then(val => {
+      clearTimeout(timeout);
       if (val) {
         savedRef.current = val;
         setSaved(val);
@@ -74,22 +92,37 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
         if (val.quiz)         setQuiz(val.quiz);
         if (val.quizAnswers)  setAnswers(val.quizAnswers);
         if (val.quizResult)   setQuizResult(val.quizResult);
-        if (val.screenshots?.length) setScreenshots(val.screenshots);
-        else if (val.screenshot)     setScreenshots([val.screenshot]);
+        if (val.essayPrompt)  setEssayPrompt(val.essayPrompt);
+        if (val.essayText)    setEssayText(val.essayText);
+        if (val.essayResult)  setEssayResult(val.essayResult);
+        if (val.mathProblems) setMathProblems(val.mathProblems);
       }
       setCloudLoaded(true);
+    }).catch(() => {
+      clearTimeout(timeout);
+      setCloudLoaded(true); // proceed with local data on error
     });
   }, [userId]);
 
-  // Auto-load content when tab opens
+  // Auto-load content when tab opens — wait for cloud data first
   useEffect(() => {
-    if (!content && tab === "content") loadContent();
-  }, [tab]);
+    if (cloudLoaded && !content && tab === "content") loadContent();
+  }, [tab, cloudLoaded]);
 
   // Scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
+
+  useEffect(() => {
+    if (!chapter || !sub) return;
+    if (tab === "essay" && subject === "romana") {
+      trackFeature("essay_tab_opened", { chapterId, chapterTitle: chapter.title, subject });
+    }
+    if (tab === "math" && subject === "matematica") {
+      trackFeature("math_tab_opened", { chapterId, chapterTitle: chapter.title, subject });
+    }
+  }, [tab, chapterId, subject]);
 
   // ── ACTIONS ────────────────────────────────────────────────────────────────
   async function loadContent() {
@@ -100,8 +133,12 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       persist({ content: text });
       logger.contentGenerated(chapter, subject);
       recordContentRead();
-    } catch {
-      setContent("❌ Nu s-a putut genera lecția. Verifică conexiunea și încearcă din nou.");
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) {
+        setUpgradeModal("lesson");
+      } else {
+        setContent("❌ Nu s-a putut genera lecția. Verifică conexiunea și încearcă din nou.");
+      }
     }
     setLC(false);
   }
@@ -120,8 +157,13 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       persist({ chatHistory: full });
       logger.chatMessage(chapter, subject, msg, reply);
       recordChatMessage();
-    } catch {
-      setChatHistory([...newHistory, { role: "assistant", content: "❌ Eroare. Încearcă din nou." }]);
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) {
+        setChatHistory(newHistory); // Remove the pending user message
+        setUpgradeModal("chat");
+      } else {
+        setChatHistory([...newHistory, { role: "assistant", content: "❌ Eroare. Încearcă din nou." }]);
+      }
     }
     setLoadingChat(false);
   }
@@ -137,7 +179,11 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       setQuizResult(null);
       persist({ quiz: q, quizAnswers: {}, quizResult: null });
     } catch (e) {
-      setQuizError(e.message || "Eroare la generarea quiz-ului.");
+      if (e.message?.startsWith("LIMIT_REACHED:")) {
+        setUpgradeModal("quiz");
+      } else {
+        setQuizError(e.message || "Eroare la generarea quiz-ului.");
+      }
     }
     setLQ(false);
   }
@@ -162,12 +208,9 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       persist({ quizResult: result, quizAttempts: attemptNum });
       logger.quizSubmitted(chapter, subject, result.score, result.passed, answers, quiz.questions, attemptNum);
       recordQuizAttempt(result.score, result.passed);
-      if (result.passed) {
-        const hasProof = screenshots.length > 0 || savedRef.current.screenshots?.length > 0;
-        if (hasProof && !savedRef.current._unlockCalled) {
-          savedRef.current._unlockCalled = true;
-          onUnlock(chapterId);
-        }
+      if (result.passed && !savedRef.current._unlockCalled) {
+        savedRef.current._unlockCalled = true;
+        onUnlock(chapterId);
       }
     } catch {
       alert("Eroare la evaluare. Încearcă din nou.");
@@ -180,40 +223,147 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     persist({ quiz: null, quizAnswers: {}, quizResult: null });
   }
 
-  function handleFile(e) {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const img = ev.target.result;
-        setScreenshots(prev => {
-          const updated = [...prev, img];
-          persist({ screenshots: updated, screenshot: updated[0] });
-          return updated;
-        });
-        logger.screenshotUploaded(chapter, subject);
-        recordScreenshot();
-        const qp = quizPassed || savedRef.current.quizResult?.passed;
-        if (qp && !savedRef.current._unlockCalled) {
-          savedRef.current._unlockCalled = true;
-          onUnlock(chapterId);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
+  // ── ESSAY HANDLERS ──────────────────────────────────────────────────────────
+  async function loadEssayPrompt() {
+    setLEP(true);
+    setEssayError(null);
+    try {
+      const p = await generateEssayPrompt(chapter);
+      setEssayPrompt(p);
+      setEssayText("");
+      setEssayResult(null);
+      persist({ essayPrompt: p, essayText: "", essayResult: null });
+      trackFeature("essay_prompt_generated", { chapterId, chapterTitle: chapter.title, subject });
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
+      else setEssayError(e.message || "Eroare la generarea cerinței.");
+    }
+    setLEP(false);
   }
+
+  function updateEssayText(t) {
+    setEssayText(t);
+    const started = !!savedRef.current._essayDraftStarted;
+    persist({ essayText: t, ...(t.trim() && !started ? { _essayDraftStarted: true } : {}) });
+    if (t.trim() && !started) {
+      trackFeature("essay_draft_started", { chapterId, chapterTitle: chapter.title, subject });
+    }
+  }
+
+  async function submitEssay() {
+    if (!essayPrompt || !essayText.trim() || evaluatingEssay) return;
+    setEvalEssay(true);
+    setEssayError(null);
+    try {
+      trackFeature("essay_evaluation_submitted", { chapterId, chapterTitle: chapter.title, subject, wordCount: essayWordCount });
+      const result = await evaluateEssay(chapter, essayPrompt, essayText, user?.name?.split(" ")[0] || "elevul");
+      setEssayResult(result);
+      persist({ essayResult: result });
+      logger.essayEvaluated(chapter, subject, result.score, result.wordCount);
+      trackFeature("essay_evaluation_completed", { chapterId, chapterTitle: chapter.title, subject, score: result.score, wordCount: result.wordCount || essayWordCount });
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
+      else setEssayError(e.message || "Eroare la evaluare.");
+    }
+    setEvalEssay(false);
+  }
+
+  function resetEssay() {
+    setEssayPrompt(null); setEssayText(""); setEssayResult(null);
+    persist({ essayPrompt: null, essayText: "", essayResult: null, _essayDraftStarted: false });
+  }
+
+  // ── MATH PROBLEMS HANDLERS ──────────────────────────────────────────────────
+  async function loadMathProblems() {
+    setLPB(true);
+    setProblemsError(null);
+    try {
+      const data = await generateMathProblems(chapter);
+      setMathProblems(data);
+      setRevealed({});
+      setStudentSol({});
+      setVerdicts({});
+      persist({ mathProblems: data });
+      logger.mathProblemsGenerated(chapter, subject);
+      trackFeature("math_set_generated", { chapterId, chapterTitle: chapter.title, subject, problemCount: data?.problems?.length || 0 });
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("lesson");
+      else setProblemsError(e.message || "Eroare la generarea problemelor.");
+    }
+    setLPB(false);
+  }
+
+  function toggleSolution(problemId) {
+    setRevealed(prev => {
+      const nextValue = !prev[problemId];
+      if (nextValue) {
+        trackFeature("math_solution_revealed", { chapterId, chapterTitle: chapter.title, subject, problemId });
+      }
+      return { ...prev, [problemId]: nextValue };
+    });
+  }
+
+  function updateStudentSolution(problemId, text) {
+    setStudentSol(prev => ({ ...prev, [problemId]: text }));
+  }
+
+  async function checkMathSolution(problem) {
+    const sol = studentSolutions[problem.id]?.trim();
+    if (!sol || evalProblemId === problem.id) return;
+    setEvalPid(problem.id);
+    try {
+      trackFeature("math_solution_submitted", { chapterId, chapterTitle: chapter.title, subject, problemId: problem.id, dificultate: problem.dificultate });
+      const verdict = await evaluateMathSolution(problem, sol, user?.name?.split(" ")[0] || "elevul");
+      setVerdicts(prev => ({ ...prev, [problem.id]: verdict }));
+      logger.mathSolutionEvaluated(chapter, subject, problem.dificultate, verdict.verdict, verdict.scor);
+      trackFeature("math_solution_evaluated", { chapterId, chapterTitle: chapter.title, subject, problemId: problem.id, dificultate: problem.dificultate, verdict: verdict.verdict, score: verdict.scor });
+    } catch (e) {
+      if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
+      else setVerdicts(prev => ({ ...prev, [problem.id]: { verdict: "gresit", scor: 0, comentariu: "Eroare la verificare. Încearcă din nou.", indiciu: "" } }));
+    }
+    setEvalPid(null);
+  }
+
+  function resetMathProblems() {
+    setMathProblems(null); setRevealed({}); setStudentSol({}); setVerdicts({});
+    persist({ mathProblems: null });
+  }
+
+  // ── DERIVED FOR ESSAY ──────────────────────────────────────────────────────
+  const essayWordCount = essayText.trim().split(/\s+/).filter(Boolean).length;
+  const essayInRange = essayPrompt
+    ? essayWordCount >= essayPrompt.lungimeMin && essayWordCount <= essayPrompt.lungimeMax
+    : false;
 
   // ── TABS ───────────────────────────────────────────────────────────────────
   const tabs = [
-    { id: "content",    icon: "📚", label: "Lecție" },
-    { id: "chat",       icon: "💬", label: "Tutore" },
-    { id: "quiz",       icon: "🧠", label: "Quiz" + (quizPassed ? " ✓" : "") },
-    { id: "screenshot", icon: "📸", label: "Dovadă" + (hasScreenshot ? " ✓" : "") },
+    { id: "content", icon: "📚", label: "Lecție" },
+    { id: "chat",    icon: "💬", label: "Tutore" },
+    { id: "quiz",    icon: "🧠", label: "Quiz" + (quizPassed ? " ✓" : "") },
+    ...(subject === "romana"
+      ? [{ id: "essay", icon: "📝", label: "Compunere" + (essayResult ? ` ${essayResult.score}` : "") }]
+      : []),
+    ...(subject === "matematica"
+      ? [{ id: "math", icon: "🧮", label: "Probleme" }]
+      : []),
   ];
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
+  if (!sub || !chapter) return (
+    <div style={{ padding: 20, fontFamily: "'Inter', sans-serif" }}>
+      <h2>Nu s-a putut încărca lecția</h2>
+      <p>Capitolul sau materia nu există în structura aplicației. Te rog revino la pagina anterioară.</p>
+      <button style={S.btnY} onClick={onBack}>Înapoi</button>
+    </div>
+  );
+
+  if (!cloudLoaded) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 16, fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ fontSize: 32 }}>📖</div>
+      <div style={{ fontSize: 15, color: "#666" }}>Se încarcă capitolul...</div>
+    </div>
+  );
+
   return (
     <div style={S.shell}>
       {/* Header */}
@@ -229,8 +379,6 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       {/* Unlock bar */}
       <div style={S.unlockBar}>
         <Step done={quizPassed} label="Quiz 8/10" n="1" />
-        <div style={S.unlockLine} />
-        <Step done={hasScreenshot} label="Screenshot" n="2" />
         <div style={S.unlockLine} />
         <Step done={isUnlocked} label="Bifat" n="🔒" gold />
       </div>
@@ -348,7 +496,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                       {quizResult.score}/10
                     </div>
                     <div style={{ fontSize: 13, color: "#444", margin: "6px 0" }}>
-                      {quizResult.passed ? "Ai trecut! Acum încarcă și un screenshot." : "Nu ai trecut. Mai încearcă!"}
+                      {quizResult.passed ? "Felicitări! Capitolul e bifat 🎉" : "Nu ai trecut. Mai încearcă!"}
                     </div>
                     <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6, fontStyle: "italic" }}>{quizResult.feedback}</div>
                     {!quizResult.passed && <button style={{ ...S.btnY, width: "auto", marginTop: 12 }} onClick={resetQuiz}>🔄 Încearcă din nou</button>}
@@ -388,7 +536,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                     style={{ ...S.btnY, opacity: (Object.keys(answers).length === quiz.questions.length && !evaluating) ? 1 : 0.4 }}
                     onClick={submitQuiz}
                     disabled={Object.keys(answers).length < quiz.questions.length || evaluating}>
-                    {evaluating ? "⏳ Claude corectează..." : `✅ Trimite răspunsurile (${Object.keys(answers).length}/10)`}
+                    {evaluating ? "⏳ Aplicația corectează..." : `✅ Trimite răspunsurile (${Object.keys(answers).length}/10)`}
                   </button>
                 )}
               </div>
@@ -396,66 +544,328 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
           </div>
         )}
 
-        {/* SCREENSHOT */}
-        {tab === "screenshot" && (
+        {/* COMPUNERE (Romana only) */}
+        {tab === "essay" && subject === "romana" && (
           <div>
-            <div style={S.card}>
-              <div style={S.cardTitle}>📸 Dovada muncii tale</div>
-              <p style={{ fontSize: 13, color: "#444", marginBottom: 16, lineHeight: 1.6 }}>
-                Fă o poză cu notițele sau manualul din care ai studiat <strong style={{ color: sub.accent }}>{chapter.title}</strong>.
-              </p>
-              {!quizPassed && (
-                <div style={S.warningBox}>🧠 Trebuie să treci mai întâi quiz-ul (8/10).</div>
-              )}
-              <div style={{ ...S.dropZone, borderColor: screenshots.length > 0 ? "#2E7D32" : "#D5D0C8" }}
-                onClick={() => fileRef.current?.click()}>
-                <div style={{ textAlign: "center", color: "#AAA" }}>
-                  <div style={{ fontSize: 32 }}>📷</div>
-                  <div style={{ fontSize: 13, color: "#888" }}>
-                    {screenshots.length > 0 ? `${screenshots.length} poze — apasă pentru a adăuga` : "Apasă pentru a alege poze"}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#BBB", marginTop: 4 }}>Poți selecta mai multe deodată</div>
+            {!essayPrompt ? (
+              <div style={S.card}>
+                <div style={S.cardTitle}>📝 Antrenament redactare — Subiectul II</div>
+                <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
+                  La EN VIII, Subiectul II îți cere să redactezi un text de <strong>150-300 cuvinte</strong>.
+                  E unde se câștigă sau se pierd 16 puncte. Aici primești o cerință pe tema capitolului
+                  <strong> "{chapter.title}"</strong>, scrii compunerea, iar Aplicația o evaluează după baremul oficial.
+                </p>
+                <div style={{ background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#7A5C00", marginBottom: 14, lineHeight: 1.5 }}>
+                  ⚠️ <strong>Important:</strong> lungimea trebuie să fie strict 150-300 cuvinte.
+                  Texte mai scurte sau mai lungi pierd puncte la criteriul de redactare — exact ca la examenul real.
                 </div>
-              </div>
-              <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleFile} />
-              {screenshots.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>
-                    📸 {screenshots.length} {screenshots.length === 1 ? "poză încărcată" : "poze încărcate"}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
-                    {screenshots.map((img, i) => (
-                      <div key={i} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: "1px solid #E0DBD0" }}>
-                        <img src={img} alt={`screenshot ${i+1}`} style={{ width: "100%", height: 90, objectFit: "cover", display: "block" }} />
-                        <button onClick={() => {
-                          const upd = screenshots.filter((_, idx) => idx !== i);
-                          setScreenshots(upd);
-                          persist({ screenshots: upd, screenshot: upd[0] || null });
-                        }} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.6)", color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: 11, lineHeight: 1 }}>✕</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            {isUnlocked ? (
-              <div style={{ ...S.resultBanner, background: "#E8F5E9", borderColor: "#A5D6A7" }}>
-                <div style={{ fontSize: 32 }}>🏆</div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: "#2E7D32", fontFamily: "'Syne',sans-serif" }}>Capitol bifat!</div>
-                <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>Felicitări! Continuă cu următorul capitol.</div>
+                <button style={S.btnY} onClick={loadEssayPrompt} disabled={loadingEssayPrompt}>
+                  {loadingEssayPrompt ? "⏳ Generează cerința..." : "📝 Cere subiect de compunere"}
+                </button>
+                {essayError && <div style={{ ...S.errorBox, marginTop: 12 }}>❌ {essayError}</div>}
               </div>
             ) : (
-              <div style={S.unlockChecklist}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 10 }}>Pentru a bifa capitolul:</div>
-                <div style={S.checkItem}><span style={{ color: quizPassed ? "#6BCB77" : "#AAA" }}>{quizPassed ? "✅" : "⬜"}</span> Quiz trecut (min. 8/10)</div>
-                <div style={S.checkItem}><span style={{ color: hasScreenshot ? "#6BCB77" : "#AAA" }}>{hasScreenshot ? "✅" : "⬜"}</span> Screenshot încărcat</div>
+              <>
+                {/* Subiectul */}
+                <div style={S.card}>
+                  <div style={{ fontSize: 11, color: "#C8A84B", marginBottom: 6, fontWeight: 800, fontFamily: "'Syne',sans-serif", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Subiect — text {essayPrompt.tip}
+                  </div>
+                  <div style={{ fontSize: 14, color: "#1A1A1A", lineHeight: 1.65, marginBottom: 12, fontWeight: 500 }}>
+                    {essayPrompt.cerinta}
+                  </div>
+                  {essayPrompt.indicatii?.length > 0 && (
+                    <div style={{ background: "#F8F6F2", borderRadius: 8, padding: "10px 12px", marginBottom: 4 }}>
+                      <div style={{ fontSize: 11, color: "#888", fontWeight: 700, marginBottom: 6 }}>Indicații:</div>
+                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#555", lineHeight: 1.6 }}>
+                        {essayPrompt.indicatii.map((ind, i) => <li key={i}>{ind}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Compunerea elevului */}
+                <div style={S.card}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "#1A1A1A" }}>✏️ Scrie aici compunerea ta</div>
+                    <div style={{
+                      fontSize: 12, fontWeight: 700,
+                      color: essayInRange ? "#2E7D32" : essayWordCount === 0 ? "#999" : "#C62828",
+                      fontFamily: "'Inter',sans-serif",
+                    }}>
+                      {essayWordCount} / {essayPrompt.lungimeMin}-{essayPrompt.lungimeMax} cuvinte
+                      {essayInRange && " ✓"}
+                    </div>
+                  </div>
+                  <textarea
+                    value={essayText}
+                    onChange={e => updateEssayText(e.target.value)}
+                    placeholder={`Începe să scrii aici... (minim ${essayPrompt.lungimeMin}, maxim ${essayPrompt.lungimeMax} cuvinte)`}
+                    disabled={!!essayResult}
+                    style={{
+                      width: "100%", minHeight: 220, padding: 12, fontSize: 14, lineHeight: 1.7,
+                      border: `1px solid ${essayInRange ? "#A5D6A7" : "#E0DBD0"}`,
+                      borderRadius: 8, fontFamily: "Georgia, serif", resize: "vertical",
+                      background: essayResult ? "#F8F6F2" : "#fff", color: "#1A1A1A", outline: "none",
+                    }}
+                  />
+                  {!essayResult && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button
+                        style={{ ...S.btnY, marginTop: 0, opacity: (essayInRange && !evaluatingEssay) ? 1 : 0.5 }}
+                        onClick={submitEssay}
+                        disabled={!essayInRange || evaluatingEssay}
+                      >
+                        {evaluatingEssay ? "⏳ Aplicația evaluează..." : "✅ Trimite spre evaluare"}
+                      </button>
+                      <button style={S.btnGray} onClick={resetEssay}>🔄 Alt subiect</button>
+                    </div>
+                  )}
+                  {!essayInRange && essayWordCount > 0 && !essayResult && (
+                    <div style={{ fontSize: 11, color: "#C62828", marginTop: 8, fontStyle: "italic" }}>
+                      {essayWordCount < essayPrompt.lungimeMin
+                        ? `Mai ai nevoie de cel puțin ${essayPrompt.lungimeMin - essayWordCount} cuvinte.`
+                        : `Ai depășit limita cu ${essayWordCount - essayPrompt.lungimeMax} cuvinte. Restrânge textul.`}
+                    </div>
+                  )}
+                  {essayError && <div style={{ ...S.errorBox, marginTop: 12 }}>❌ {essayError}</div>}
+                </div>
+
+                {/* Rezultat */}
+                {essayResult && (
+                  <>
+                    {/* Score banner */}
+                    <div style={{ ...S.resultBanner, background: essayResult.score >= 8 ? "#E8F5E9" : essayResult.score >= 5 ? "#FFF8E7" : "#FFF0EE", borderColor: essayResult.score >= 8 ? "#A5D6A7" : essayResult.score >= 5 ? "#F0D98A" : "#FFCDD2" }}>
+                      <div style={{ fontSize: 32, marginBottom: 6 }}>{essayResult.score >= 8 ? "🎉" : essayResult.score >= 5 ? "📈" : "💪"}</div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: essayResult.score >= 8 ? "#2E7D32" : essayResult.score >= 5 ? "#7A5C00" : "#C62828", fontFamily: "'Syne',sans-serif" }}>
+                        {essayResult.score}/10
+                      </div>
+                      <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                        {essayResult.totalP}/{essayResult.maxP} puncte · {essayResult.wordCount} cuvinte
+                      </div>
+                    </div>
+
+                    {/* Defalcare per criteriu */}
+                    <div style={S.card}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: "#1A1A1A", marginBottom: 12 }}>📊 Defalcare pe criterii (barem EN VIII)</div>
+                      {essayResult.criterii.map((c, i) => (
+                        <div key={i} style={{ marginBottom: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#1A1A1A", textTransform: "capitalize" }}>{c.nume}</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: c.punctaj === c.maxim ? "#2E7D32" : c.punctaj >= c.maxim * 0.6 ? "#C8A84B" : "#C62828" }}>
+                              {c.punctaj}/{c.maxim}p
+                            </div>
+                          </div>
+                          <div style={{ height: 6, background: "#F0EDE6", borderRadius: 3, overflow: "hidden", marginBottom: 4 }}>
+                            <div style={{ height: "100%", width: `${(c.punctaj / c.maxim) * 100}%`, background: c.punctaj === c.maxim ? "#2E7D32" : c.punctaj >= c.maxim * 0.6 ? "#C8A84B" : "#E8654A", borderRadius: 3 }} />
+                          </div>
+                          {c.comentariu && <div style={{ fontSize: 11, color: "#666", lineHeight: 1.5, fontStyle: "italic" }}>{c.comentariu}</div>}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Puncte forte */}
+                    {essayResult.puncteforte?.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "#2E7D32", marginBottom: 8 }}>✨ Puncte forte</div>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#444", lineHeight: 1.7 }}>
+                          {essayResult.puncteforte.map((p, i) => <li key={i}>{p}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* De îmbunătățit */}
+                    {essayResult.deImbunatatit?.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "#C8A84B", marginBottom: 8 }}>🎯 De îmbunătățit</div>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#444", lineHeight: 1.7 }}>
+                          {essayResult.deImbunatatit.map((p, i) => <li key={i}>{p}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Rescrieri sugerate */}
+                    {essayResult.rescrieri?.length > 0 && (
+                      <div style={S.card}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "#1A1A1A", marginBottom: 10 }}>✏️ Sugestii de rescriere</div>
+                        {essayResult.rescrieri.map((r, i) => (
+                          <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < essayResult.rescrieri.length - 1 ? "1px solid #F0EDE6" : "none" }}>
+                            <div style={{ fontSize: 11, color: "#C62828", marginBottom: 4, fontWeight: 600 }}>Original:</div>
+                            <div style={{ fontSize: 12, color: "#666", fontStyle: "italic", marginBottom: 8, padding: "6px 10px", background: "#FFF0EE", borderRadius: 6, borderLeft: "3px solid #FFCDD2" }}>"{r.original}"</div>
+                            <div style={{ fontSize: 11, color: "#2E7D32", marginBottom: 4, fontWeight: 600 }}>Sugestie:</div>
+                            <div style={{ fontSize: 12, color: "#1A1A1A", padding: "6px 10px", background: "#E8F5E9", borderRadius: 6, borderLeft: "3px solid #A5D6A7", lineHeight: 1.5 }}>"{r.sugestie}"</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button style={{ ...S.btnY, marginTop: 16 }} onClick={resetEssay}>
+                      📝 Încearcă altă compunere
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* PROBLEME (Mate only) */}
+        {tab === "math" && subject === "matematica" && (
+          <div>
+            {!mathProblems ? (
+              <div style={S.card}>
+                <div style={S.cardTitle}>🧮 Probleme rezolvate pas-cu-pas</div>
+                <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
+                  La EN VIII Matematică, ce contează e să <strong>arăți pașii</strong>, nu doar răspunsul.
+                  La Subiectul III primești puncte parțiale chiar dacă răspunsul final e greșit.
+                </p>
+                <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
+                  Aici Aplicația îți generează 3 probleme pe tema <strong>"{chapter.title}"</strong> —
+                  una ușoară, una medie, una grea — cu rezolvare pas-cu-pas. Poți încerca singur și
+                  primi feedback, sau să vezi direct rezolvarea.
+                </p>
+                <button style={S.btnY} onClick={loadMathProblems} disabled={loadingProblems}>
+                  {loadingProblems ? "⏳ Generează probleme..." : "🧮 Generează 3 probleme model"}
+                </button>
+                {problemsError && <div style={{ ...S.errorBox, marginTop: 12 }}>❌ {problemsError}</div>}
               </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, color: "#888", fontFamily: "'Inter',sans-serif" }}>
+                    {mathProblems.problems.length} probleme generate
+                  </div>
+                  <button style={S.btnGray} onClick={resetMathProblems}>🔄 Probleme noi</button>
+                </div>
+
+                {mathProblems.problems.map((p, idx) => {
+                  const revealed = !!revealedSolutions[p.id];
+                  const studentSol = studentSolutions[p.id] || "";
+                  const verdict = solutionVerdicts[p.id];
+                  const evaluating = evalProblemId === p.id;
+                  const diffColor = p.dificultate === "ușor" ? "#2E7D32" : p.dificultate === "mediu" ? "#C8A84B" : "#C62828";
+                  const diffBg    = p.dificultate === "ușor" ? "#E8F5E9" : p.dificultate === "mediu" ? "#FFF8E7" : "#FFF0EE";
+                  return (
+                    <div key={p.id} style={{ ...S.card, borderLeft: `4px solid ${diffColor}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div style={{ fontWeight: 800, fontSize: 12, color: "#1A1A1A", fontFamily: "'Syne',sans-serif", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Problema {idx + 1}
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 12, background: diffBg, color: diffColor, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          {p.dificultate}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 14, color: "#1A1A1A", lineHeight: 1.7, marginBottom: 14, whiteSpace: "pre-wrap" }}>
+                        {p.enunt}
+                      </div>
+
+                      {/* Try-yourself area */}
+                      {!revealed && !verdict && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, color: "#666", fontWeight: 700, marginBottom: 6 }}>🤔 Încearcă singur:</div>
+                          <textarea
+                            value={studentSol}
+                            onChange={e => updateStudentSolution(p.id, e.target.value)}
+                            placeholder="Scrie aici rezolvarea ta, pas cu pas..."
+                            style={{ width: "100%", minHeight: 100, padding: 10, fontSize: 13, lineHeight: 1.6, border: "1px solid #E0DBD0", borderRadius: 8, fontFamily: "'Inter',sans-serif", resize: "vertical", background: "#fff", color: "#1A1A1A", outline: "none" }}
+                          />
+                          <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                            <button
+                              style={{ ...S.btnY, marginTop: 0, flex: "1 1 auto", opacity: (studentSol.trim() && !evaluating) ? 1 : 0.5 }}
+                              onClick={() => checkMathSolution(p)}
+                              disabled={!studentSol.trim() || evaluating}
+                            >
+                              {evaluating ? "⏳ Verifică..." : "✅ Verifică rezolvarea"}
+                            </button>
+                            <button style={S.btnGray} onClick={() => toggleSolution(p.id)}>
+                              👁️ Arată rezolvarea
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Verdict */}
+                      {verdict && (
+                        <div style={{
+                          background: verdict.verdict === "corect" ? "#E8F5E9" : verdict.verdict === "partial" ? "#FFF8E7" : "#FFF0EE",
+                          border: `1px solid ${verdict.verdict === "corect" ? "#A5D6A7" : verdict.verdict === "partial" ? "#F0D98A" : "#FFCDD2"}`,
+                          borderRadius: 10, padding: 12, marginBottom: 12,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                            <div style={{ fontWeight: 800, fontSize: 13, color: verdict.verdict === "corect" ? "#2E7D32" : verdict.verdict === "partial" ? "#7A5C00" : "#C62828", fontFamily: "'Syne',sans-serif", textTransform: "uppercase" }}>
+                              {verdict.verdict === "corect" ? "✅ Corect" : verdict.verdict === "partial" ? "📈 Parțial" : "💪 Mai exersează"}
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#666" }}>{verdict.scor}/3p</div>
+                          </div>
+                          {verdict.comentariu && <div style={{ fontSize: 12, color: "#444", lineHeight: 1.6, marginBottom: 8 }}>{verdict.comentariu}</div>}
+                          {verdict.primulPasGresit && (
+                            <div style={{ fontSize: 11, color: "#C62828", marginBottom: 8, fontStyle: "italic" }}>
+                              ⚠️ Primul pas greșit: {verdict.primulPasGresit}
+                            </div>
+                          )}
+                          {verdict.indiciu && verdict.verdict !== "corect" && (
+                            <div style={{ background: "#fff", borderRadius: 6, padding: "8px 10px", fontSize: 12, color: "#555", borderLeft: "3px solid #C8A84B" }}>
+                              💡 <strong>Indiciu:</strong> {verdict.indiciu}
+                            </div>
+                          )}
+                          <button
+                            style={{ ...S.btnGray, marginTop: 10, width: "100%" }}
+                            onClick={() => toggleSolution(p.id)}
+                          >
+                            {revealed ? "🙈 Ascunde rezolvarea" : "👁️ Vezi rezolvarea oficială"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Solution */}
+                      {revealed && (
+                        <div style={{ background: "#F8F6F2", borderRadius: 10, padding: 14, marginTop: 4 }}>
+                          <div style={{ fontWeight: 800, fontSize: 12, color: "#C8A84B", marginBottom: 10, fontFamily: "'Syne',sans-serif", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                            ✏️ Rezolvare pas-cu-pas
+                          </div>
+                          {p.solutie.pasi.map((pas, i) => (
+                            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-start" }}>
+                              <div style={{ background: "#C8A84B", color: "#fff", borderRadius: "50%", minWidth: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+                                {i + 1}
+                              </div>
+                              <div style={{ fontSize: 13, color: "#1A1A1A", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{pas}</div>
+                            </div>
+                          ))}
+                          {p.solutie.raspunsFinal && (
+                            <div style={{ marginTop: 12, padding: "10px 12px", background: "#E8F5E9", border: "1px solid #A5D6A7", borderRadius: 8, fontSize: 13, color: "#2E7D32", fontWeight: 700 }}>
+                              <span style={{ fontFamily: "'Syne',sans-serif", textTransform: "uppercase", fontSize: 10, letterSpacing: "0.5px", display: "block", marginBottom: 4 }}>Răspuns final</span>
+                              {p.solutie.raspunsFinal}
+                            </div>
+                          )}
+                          {p.solutie.intuitie && (
+                            <div style={{ marginTop: 10, padding: "8px 12px", background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 8, fontSize: 12, color: "#7A5C00", lineHeight: 1.6, fontStyle: "italic" }}>
+                              💡 {p.solutie.intuitie}
+                            </div>
+                          )}
+                          {!verdict && (
+                            <button style={{ ...S.btnGray, marginTop: 12, width: "100%" }} onClick={() => toggleSolution(p.id)}>
+                              🙈 Ascunde rezolvarea
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
         )}
 
       </div>
       <style>{CSS}</style>
+      {upgradeModal && (
+        <UpgradeModal
+          limitType={upgradeModal}
+          token={localStorage.getItem("en2026_token")}
+          onClose={() => setUpgradeModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -486,14 +896,14 @@ function renderMd(text) {
 
 // ── Animated loading ──────────────────────────────────────────────────────────
 const CONTENT_MESSAGES = [
-  "Claude citește programa de clasa a VIII-a...",
+  "Aplicația citește programa de clasa a VIII-a...",
   "Se pregătesc explicații pentru tine...",
   "Se caută cele mai bune exemple...",
   "Se construiesc exercițiile rezolvate...",
   "Aproape gata! Se finisează lecția...",
 ];
 const QUIZ_MESSAGES = [
-  "Claude inventează întrebări dificile... 😈",
+  "Aplicația inventează întrebări dificile... 😈",
   "Se calibrează dificultatea pentru tine...",
   "Se verifică întrebările cu programa EN...",
   "Se pregătesc capcanele... 🪤",
