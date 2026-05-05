@@ -278,6 +278,20 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET usage for a user ─────────────────────────────────────────────────────
+  // Replaces the missing /api/usage endpoint that AdminApp calls
+  if (req.method === "GET" && mode === "usage" && uid) {
+    try {
+      const usageRaw = await redisCmd("GET", `usage:${uid}`).catch(() => null);
+      const usage = usageRaw
+        ? (typeof usageRaw === "string" ? JSON.parse(usageRaw) : usageRaw)
+        : { lesson: 0, quiz: 0, chat: 0 };
+      return res.status(200).json({ ok: true, usage });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   // ── RESET usage counters ─────────────────────────────────────────────────────
   if (req.method === "POST" && mode === "reset-usage") {
     const { userId, type } = req.body || {};
