@@ -36,4 +36,7 @@ export const logger = {
     answers: questions.map((q, i) => ({ question: q.question, correct: q.correct, given: answers[i] || null, isCorrect: answers[i] === q.correct, explanation: q.explanation })),
   }),
   chapterUnlocked:    (chapter, subject) => log("chapter_unlocked",    { chapterId: chapter.id, chapterTitle: chapter.title, subject }),
+  essayEvaluated:     (chapter, subject, score, wordCount) => log("essay_evaluated", { chapterId: chapter.id, chapterTitle: chapter.title, subject, score, wordCount }),
+  mathProblemsGenerated: (chapter, subject) => log("math_problems_generated", { chapterId: chapter.id, chapterTitle: chapter.title, subject }),
+  mathSolutionEvaluated: (chapter, subject, dificultate, verdict, scor) => log("math_solution_evaluated", { chapterId: chapter.id, chapterTitle: chapter.title, subject, dificultate, verdict, scor }),
 };
