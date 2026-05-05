@@ -29,7 +29,7 @@ export default function LogsView() {
 
   async function apiFetch(params) {
     // Map old modes to new admin-users endpoint modes
-    const modeMap = { days: "log-days", stats: "all-logs" };
+    const modeMap = { days: "log-days" };
     const mapped = { ...params };
     if (mapped.mode && modeMap[mapped.mode]) mapped.mode = modeMap[mapped.mode];
     else if (!mapped.mode) mapped.mode = "all-logs";
@@ -42,12 +42,34 @@ export default function LogsView() {
       throw new Error(err.error || `HTTP ${res.status}`);
     }
     const data = await res.json();
-    // Remap response keys for compatibility
     if (mapped.mode === "log-days") return { days: data.days || [] };
     return data;
   }
 
-  // Load available days on mount
+  // Build quiz stats map from an array of logs (most recent attempt per chapter wins)
+  function buildStats(logList) {
+    const map = {};
+    // logs arrive newest-first from LPUSH; first seen per chapter = most recent
+    for (const l of logList) {
+      if (l.type !== "quiz_submitted") continue;
+      const key = l.chapterId || "unknown";
+      if (!map[key]) {
+        map[key] = {
+          chapterId:    l.chapterId,
+          chapterTitle: l.chapterTitle,
+          subject:      l.subject,
+          score:        l.score ?? 0,
+          passed:       !!l.passed,
+          answers:      l.answers || [],
+          attempts:     l.attempts || 1,
+          lastAttempt:  l.ts,
+        };
+      }
+    }
+    return map;
+  }
+
+  // Load available days on mount — one Redis call
   useEffect(() => {
     (async () => {
       try {
@@ -55,8 +77,6 @@ export default function LogsView() {
         const { days: d } = await apiFetch({ mode: "days" });
         setDays(d || []);
         if (d && d.length > 0) setSelDay(d[0]);
-        const { stats: s } = await apiFetch({ mode: "stats" });
-        setStats(s || {});
       } catch (e) {
         console.error("LogsView fetch error:", e);
         setFetchError(e.message);
@@ -64,14 +84,15 @@ export default function LogsView() {
     })();
   }, []);
 
-  // Load logs when day changes
+  // Load logs when day changes — one Redis call, stats derived client-side
   useEffect(() => {
     if (!selectedDay) return;
     (async () => {
       setLoading(true);
       try {
         const { logs: l } = await apiFetch({ day: selectedDay });
-        setLogs((l || []).reverse()); // chronological order
+        setLogs((l || []).reverse()); // chronological for feed
+        setStats(buildStats(l || [])); // derive quiz stats — no extra API call
       } catch {}
       setLoading(false);
     })();
