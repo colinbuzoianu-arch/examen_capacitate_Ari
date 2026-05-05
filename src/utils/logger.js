@@ -11,9 +11,13 @@ export function setLoggerUser(name, userId) {
 async function log(type, payload) {
   // Fire and forget — never block UI, never throw errors
   try {
+    const token = localStorage.getItem("en2026_token") || "";
     fetch("/api/admin-users?mode=log", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({
         type,
         payload: { ...payload, userName: _userName, userId: _userId },
