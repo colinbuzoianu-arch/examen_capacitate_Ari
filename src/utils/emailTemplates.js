@@ -105,7 +105,7 @@ export function reminderEmailHtml({
     <a href="${appUrl}" style="display:inline-block;background:#1A1A1A;color:#fff;text-decoration:none;font-weight:bold;padding:14px 32px;border-radius:12px;font-size:15px;">
       📚 Deschide planul meu →
     </a>
-    <p style="font-size:11px;color:#BBB;margin-top:12px;">Poți bifa un capitol doar după quiz 8/10 + screenshot 📸</p>
+    <p style="font-size:11px;color:#BBB;margin-top:12px;">Poți bifa un capitol după quiz cu minim 8/10 🧠</p>
   </div>
 
   <!-- Footer -->
@@ -139,8 +139,7 @@ export function chapterUnlockEmailHtml({ studentName, chapterTitle, subject, sco
       <div style="font-size:17px;font-weight:bold;color:#1A1A1A;margin-bottom:12px;">${chapterTitle}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <span style="background:#E8F5E9;color:#2E7D32;font-size:12px;font-weight:bold;padding:4px 12px;border-radius:20px;border:1px solid #A5D6A7;">✅ Quiz ${score}/10</span>
-        <span style="background:#E8F5E9;color:#2E7D32;font-size:12px;font-weight:bold;padding:4px 12px;border-radius:20px;border:1px solid #A5D6A7;">📸 Screenshot urcat</span>
-        ${streak > 0 ? `<span style="background:#FFF8E7;color:#E65100;font-size:12px;font-weight:bold;padding:4px 12px;border-radius:20px;border:1px solid #FFE0B2;">🔥 Streak ${streak} zile</span>` : ""}
+${streak > 0 ? `<span style="background:#FFF8E7;color:#E65100;font-size:12px;font-weight:bold;padding:4px 12px;border-radius:20px;border:1px solid #FFE0B2;">🔥 Streak ${streak} zile</span>` : ""}
       </div>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid #F0EDE6;">
         <div style="font-size:12px;color:#999;margin-bottom:6px;">Progres total: ${chaptersUnlocked}/${totalChapters} capitole</div>
