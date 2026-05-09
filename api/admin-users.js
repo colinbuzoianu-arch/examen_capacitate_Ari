@@ -39,6 +39,7 @@ function latestArea(gamification, featureUsage) {
     { area: "Lecții / quiz", ts: gamification?.lastStudyDate ? `${gamification.lastStudyDate}T12:00:00Z` : null },
     { area: "Compunere", ts: featureUsage?.essay?.lastUsed || null },
     { area: "Probleme", ts: featureUsage?.math?.lastUsed || null },
+    { area: "Simulare", ts: featureUsage?.simulare?.lastUsed || null },
   ].filter(c => asTime(c.ts));
   candidates.sort((a, b) => asTime(b.ts) - asTime(a.ts));
   return candidates[0]?.area || null;
@@ -68,6 +69,18 @@ function emptyFeatureUsage() {
       lastUsed: null,
       chapters: {},
     },
+    simulare: {
+      // Per-subject aggregate
+      romana: {
+        started: 0, completed: 0, bestNota: null, lastNota: null, lastUsed: null,
+        notaTotal: 0, // for averages
+      },
+      matematica: {
+        started: 0, completed: 0, bestNota: null, lastNota: null, lastUsed: null,
+        notaTotal: 0,
+      },
+      lastUsed: null,
+    },
   };
 }
 
@@ -76,6 +89,12 @@ function ensureFeatureUsage(u) {
   return {
     essay: { ...base.essay, ...(u?.essay || {}), chapters: { ...(u?.essay?.chapters || {}) } },
     math: { ...base.math, ...(u?.math || {}), chapters: { ...(u?.math?.chapters || {}) } },
+    simulare: {
+      ...base.simulare,
+      ...(u?.simulare || {}),
+      romana: { ...base.simulare.romana, ...(u?.simulare?.romana || {}) },
+      matematica: { ...base.simulare.matematica, ...(u?.simulare?.matematica || {}) },
+    },
   };
 }
 
@@ -91,9 +110,15 @@ function applyFeatureEvent(usage, eventType, payload = {}) {
   const chapterId = payload.chapterId || "unknown";
   const wordCount = Number(payload.wordCount || 0);
   const score = payload.score === undefined || payload.score === null ? null : Number(payload.score);
+  const subject = payload.subject; // "romana" | "matematica" — for simulare events
+  const nota = payload.nota === undefined || payload.nota === null ? null : Number(payload.nota);
 
   if (eventType.startsWith("essay_")) usage.essay.lastUsed = now;
   if (eventType.startsWith("math_")) usage.math.lastUsed = now;
+  if (eventType.startsWith("simulare_")) {
+    usage.simulare.lastUsed = now;
+    if (subject && usage.simulare[subject]) usage.simulare[subject].lastUsed = now;
+  }
 
   switch (eventType) {
     case "essay_tab_opened":
@@ -116,6 +141,18 @@ function applyFeatureEvent(usage, eventType, payload = {}) {
       usage.math.solutionsSubmitted += 1; incChapter(usage, "math", chapterId, "solutionsSubmitted"); break;
     case "math_solution_evaluated":
       usage.math.evaluationsCompleted += 1; usage.math.scoreTotal += score || 0; usage.math.bestScore = usage.math.bestScore === null ? score : Math.max(usage.math.bestScore, score || 0); incChapter(usage, "math", chapterId, "evaluationsCompleted"); break;
+    case "simulare_started":
+      if (subject && usage.simulare[subject]) usage.simulare[subject].started += 1;
+      break;
+    case "simulare_completed":
+      if (subject && usage.simulare[subject]) {
+        const s = usage.simulare[subject];
+        s.completed += 1;
+        s.lastNota = nota;
+        s.notaTotal += nota || 0;
+        if (s.bestNota === null || (nota !== null && nota > s.bestNota)) s.bestNota = nota;
+      }
+      break;
     default:
       break;
   }
@@ -239,15 +276,20 @@ export default async function handler(req, res) {
           const mathEvaluations = featureUsage.math.evaluationsCompleted || 0;
           const mathSets = featureUsage.math.setsGenerated || 0;
           const mathSubmitted = featureUsage.math.solutionsSubmitted || 0;
+          const simRoCompleted = featureUsage.simulare?.romana?.completed || 0;
+          const simMaCompleted = featureUsage.simulare?.matematica?.completed || 0;
+          const simRoBestNota = featureUsage.simulare?.romana?.bestNota ?? null;
+          const simMaBestNota = featureUsage.simulare?.matematica?.bestNota ?? null;
           const lastStudyAt = gamification.lastStudyDate ? `${gamification.lastStudyDate}T12:00:00Z` : null;
-          const featureLastUsed = latestIso(featureUsage.updatedAt, featureUsage.essay.lastUsed, featureUsage.math.lastUsed);
+          const featureLastUsed = latestIso(featureUsage.updatedAt, featureUsage.essay.lastUsed, featureUsage.math.lastUsed, featureUsage.simulare?.lastUsed);
           const lastActiveAt = latestIso(lastStudyAt, featureLastUsed, u.createdAt);
           const engagementScore =
             unlockedCount * 3 +
             (gamification.quizzesPassed || 0) * 3 +
             mathSets +
             mathEvaluations * 2 +
-            essayEvaluations * 3;
+            essayEvaluations * 3 +
+            (simRoCompleted + simMaCompleted) * 5;
 
           return {
             userId:   u.userId,
@@ -271,6 +313,10 @@ export default async function handler(req, res) {
               mathEvaluations,
               mathSets,
               mathSubmitted,
+              simRoCompleted,
+              simMaCompleted,
+              simRoBestNota,
+              simMaBestNota,
               featureLastUsed,
               lastActiveAt,
               lastArea:         latestArea(gamification, featureUsage),
@@ -454,7 +500,9 @@ export default async function handler(req, res) {
       const usageRaw = await redisCmd("GET", `usage:${uid}`).catch(() => null);
       const usage = usageRaw
         ? (typeof usageRaw === "string" ? JSON.parse(usageRaw) : usageRaw)
-        : { lesson: 0, quiz: 0, chat: 0 };
+        : { lesson: 0, quiz: 0, chat: 0, simulare: 0 };
+      // Backfill simulare counter for legacy users
+      if (usage.simulare === undefined) usage.simulare = 0;
       return res.status(200).json({ ok: true, usage });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -478,11 +526,11 @@ export default async function handler(req, res) {
     if (!userId) return res.status(400).json({ error: "Missing userId" });
     try {
       const usageRaw = await redisCmd("GET", `usage:${userId}`);
-      const usage = usageRaw ? (typeof usageRaw === "string" ? JSON.parse(usageRaw) : usageRaw) : { lesson: 0, quiz: 0, chat: 0 };
+      const usage = usageRaw ? (typeof usageRaw === "string" ? JSON.parse(usageRaw) : usageRaw) : { lesson: 0, quiz: 0, chat: 0, simulare: 0 };
       if (type) {
         usage[type] = 0;
       } else {
-        usage.lesson = 0; usage.quiz = 0; usage.chat = 0;
+        usage.lesson = 0; usage.quiz = 0; usage.chat = 0; usage.simulare = 0;
       }
       await redisCmd("SET", `usage:${userId}`, JSON.stringify(usage));
       return res.status(200).json({ ok: true, userId, usage });
@@ -505,7 +553,7 @@ export default async function handler(req, res) {
       user.premiumSource = "admin";
       await redisCmd("SET", `user:${emailKey}`, JSON.stringify(user));
       // Reset usage so they start fresh
-      await redisCmd("SET", `usage:${userId}`, JSON.stringify({ lesson: 0, quiz: 0, chat: 0 }));
+      await redisCmd("SET", `usage:${userId}`, JSON.stringify({ lesson: 0, quiz: 0, chat: 0, simulare: 0 }));
       return res.status(200).json({ ok: true, userId, premium: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });

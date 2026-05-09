@@ -8,10 +8,12 @@ import { redisCmd } from "./lib/redis.js";
 // ── Limite per cont ───────────────────────────────────────────────────────────
 // 15 capitole total (7 Română + 8 Matematică)
 // Per capitol: 1 lecție + 1-2 quiz-uri + până la 10 întrebări chat
+// Plus 4 simulări complete per cont (2 română + 2 matematică, fiecare cu evaluare)
 const LIMITS = {
-  lesson: 15,   // 1 lecție per capitol * 15 capitole
-  quiz:   30,   // pot reîncerca dacă nu trec (2 încercări per capitol)
-  chat:   150,  // ~10 întrebări per capitol * 15 capitole
+  lesson:   15,   // 1 lecție per capitol * 15 capitole
+  quiz:     30,   // pot reîncerca dacă nu trec (2 încercări per capitol)
+  chat:     150,  // ~10 întrebări per capitol * 15 capitole
+  simulare: 4,    // 4 simulări complete (generare + evaluare = 1 unitate)
 };
 
 // Conturi fără limite (admin + Ari)
@@ -21,8 +23,11 @@ const UNLIMITED_EMAILS = (process.env.UNLIMITED_EMAILS || "colinbuzoianu@gmail.c
 // ── Helpers Redis ─────────────────────────────────────────────────────────────
 async function getUsage(userId) {
   const val = await redisCmd("GET", `usage:${userId}`);
-  if (!val) return { lesson: 0, quiz: 0, chat: 0 };
-  return typeof val === "string" ? JSON.parse(val) : val;
+  if (!val) return { lesson: 0, quiz: 0, chat: 0, simulare: 0 };
+  const parsed = typeof val === "string" ? JSON.parse(val) : val;
+  // Backfill simulare for existing users
+  if (parsed.simulare === undefined) parsed.simulare = 0;
+  return parsed;
 }
 
 async function incrementUsage(userId, type) {
@@ -67,7 +72,7 @@ export default async function handler(req, res) {
     const type = interactionType || "chat"; // lesson | quiz | chat
     // Userii premium au limite de 3x
     const baseLimits = session._premium
-      ? { lesson: 45, quiz: 90, chat: 500 }
+      ? { lesson: 45, quiz: 90, chat: 500, simulare: 12 }
       : LIMITS;
     const limit = baseLimits[type] ?? baseLimits.chat;
     const usage = await getUsage(session.userId);

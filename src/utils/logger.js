@@ -39,4 +39,6 @@ export const logger = {
   essayEvaluated:     (chapter, subject, score, wordCount) => log("essay_evaluated", { chapterId: chapter.id, chapterTitle: chapter.title, subject, score, wordCount }),
   mathProblemsGenerated: (chapter, subject) => log("math_problems_generated", { chapterId: chapter.id, chapterTitle: chapter.title, subject }),
   mathSolutionEvaluated: (chapter, subject, dificultate, verdict, scor) => log("math_solution_evaluated", { chapterId: chapter.id, chapterTitle: chapter.title, subject, dificultate, verdict, scor }),
+  simulareStarted:    (subject) => log("simulare_started", { subject, chapterTitle: subject === "romana" ? "Simulare Română" : "Simulare Matematică" }),
+  simulareCompleted:  (subject, nota, totalPuncte) => log("simulare_completed", { subject, nota, totalPuncte, chapterTitle: subject === "romana" ? "Simulare Română" : "Simulare Matematică" }),
 };

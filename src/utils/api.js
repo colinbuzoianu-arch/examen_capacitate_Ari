@@ -386,6 +386,249 @@ Fii cald și încurajator, dar onest. Nu da rezolvarea completă în "indiciu" �
   };
 }
 
+// ── SIMULARE EN VIII ──────────────────────────────────────────────────────────
+// Generate a full mock exam paper (Romanian or Math), structured per the
+// official EN VIII format. Returns a strict JSON object the UI can render.
+
+// Build a compact list of topics for context
+function topicsFromSubject(subjectKey, chapters) {
+  return chapters.map(c => `${c.title}: ${(c.topics || []).join(", ")}`).join(" | ");
+}
+
+// ── ROMÂNĂ simulare ──
+// Format real EN VIII română:
+//   Subiectul I (60p): text la prima vedere + 9 itemi
+//     A. Înțelegerea textului (30p): 6 itemi a câte 5p (răspuns scurt)
+//     B. Limba română (30p): 3 itemi a câte 10p (gramatică/vocabular)
+//   Subiectul II (30p): compunere 150-300 cuvinte
+//   10p din oficiu → total 100p, scalat la nota /10
+export async function generateSimulareRomana(allRomanaChapters) {
+  const system = `Ești autor de subiecte EN VIII pentru Limba și literatura română. Cunoști baremul oficial.\nRăspunde DOAR cu JSON valid, fără text suplimentar.`;
+
+  const topics = topicsFromSubject("romana", allRomanaChapters);
+
+  const prompt = `Generează un subiect complet de SIMULARE EN VIII Română, format real.\n\nTeme acoperite în clasa a VIII-a: ${topics}\n\nFormat OBLIGATORIU (cu punctaje exacte):\n- Subiectul I (60p):\n  - Text la prima vedere (literar sau nonliterar, ~250-400 cuvinte, original, NU citat din alte surse)\n  - Partea A (30p): 6 itemi cu răspuns scurt din text (a câte 5p) — înțelegere, vocabular din text, identificarea unui mijloc artistic, etc.\n  - Partea B (30p): 3 itemi (a câte 10p) — gramatică/morfologie/sintaxă cu exemple din text sau independent\n- Subiectul II (30p): compunere argumentativă/narativă/descriptivă, 150-300 cuvinte, cu cerință clară\n- Total răspunsuri: 10 itemi\n\nJSON STRICT (nimic altceva):\n{\n  "titlu": "Simulare EN VIII Română",\n  "durata": 120,\n  "punctajOficiu": 10,\n  "subiectI": {\n    "punctaj": 60,\n    "text": "Textul integral, formatat cu paragrafe (\\\\n\\\\n între paragrafe). NU pune ghilimele la început/sfârșit.",\n    "textTitlu": "Titlul textului",\n    "textAutor": "Autor fictiv sau «adaptare»",\n    "parteaA": {\n      "punctaj": 30,\n      "itemi": [\n        {"id": "I.A.1", "punctaj": 5, "cerinta": "Cerința completă a întrebării.", "tipRaspuns": "scurt"},\n        {"id": "I.A.2", "punctaj": 5, "cerinta": "...", "tipRaspuns": "scurt"},\n        {"id": "I.A.3", "punctaj": 5, "cerinta": "...", "tipRaspuns": "scurt"},\n        {"id": "I.A.4", "punctaj": 5, "cerinta": "...", "tipRaspuns": "scurt"},\n        {"id": "I.A.5", "punctaj": 5, "cerinta": "...", "tipRaspuns": "scurt"},\n        {"id": "I.A.6", "punctaj": 5, "cerinta": "...", "tipRaspuns": "scurt"}\n      ]\n    },\n    "parteaB": {\n      "punctaj": 30,\n      "itemi": [\n        {"id": "I.B.1", "punctaj": 10, "cerinta": "Cerința completă (gramatică/vocabular).", "tipRaspuns": "lung"},\n        {"id": "I.B.2", "punctaj": 10, "cerinta": "...", "tipRaspuns": "lung"},\n        {"id": "I.B.3", "punctaj": 10, "cerinta": "...", "tipRaspuns": "lung"}\n      ]\n    }\n  },\n  "subiectII": {\n    "punctaj": 30,\n    "tip": "argumentativ|narativ|descriptiv",\n    "cerinta": "Cerința completă, ex: 'Redactează un text de minimum 150 de cuvinte și maximum 300 de cuvinte în care...'",\n    "lungimeMin": 150,\n    "lungimeMax": 300\n  }\n}\n\nReguli:\n- Toate textele în română corectă cu diacritice\n- Cerințele să fie clare, de nivel EN VIII real\n- Itemii din parteaA să se refere la text\n- Itemii din parteaB să acopere teme de gramatică/morfologie/vocabular variate (NU toți din același capitol)\n- Compunerea să fie pe o temă apropiată tinerilor\n- NU folosi citate din opere reale (probleme de drepturi de autor)`;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const raw = await aiCall([{ role: "user", content: prompt }], system, 4000, 2, "simulare");
+      const parsed = extractJSON(raw);
+      if (!parsed.subiectI?.text || !parsed.subiectI?.parteaA?.itemi || !parsed.subiectII?.cerinta) {
+        throw new Error("Structură invalidă");
+      }
+      return {
+        titlu: parsed.titlu || "Simulare EN VIII Română",
+        materie: "romana",
+        durata: parsed.durata || 120,
+        punctajOficiu: parsed.punctajOficiu || 10,
+        subiectI: {
+          punctaj: 60,
+          text: parsed.subiectI.text,
+          textTitlu: parsed.subiectI.textTitlu || "",
+          textAutor: parsed.subiectI.textAutor || "",
+          parteaA: {
+            punctaj: 30,
+            itemi: (parsed.subiectI.parteaA.itemi || []).slice(0, 6).map((it, i) => ({
+              id: it.id || `I.A.${i + 1}`,
+              punctaj: it.punctaj || 5,
+              cerinta: it.cerinta || "",
+              tipRaspuns: "scurt",
+            })),
+          },
+          parteaB: {
+            punctaj: 30,
+            itemi: (parsed.subiectI.parteaB?.itemi || []).slice(0, 3).map((it, i) => ({
+              id: it.id || `I.B.${i + 1}`,
+              punctaj: it.punctaj || 10,
+              cerinta: it.cerinta || "",
+              tipRaspuns: "lung",
+            })),
+          },
+        },
+        subiectII: {
+          punctaj: 30,
+          tip: parsed.subiectII.tip || "argumentativ",
+          cerinta: parsed.subiectII.cerinta,
+          lungimeMin: parsed.subiectII.lungimeMin || 150,
+          lungimeMax: parsed.subiectII.lungimeMax || 300,
+        },
+      };
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
+      if (attempt === 2) throw new Error("Nu s-a putut genera simularea. Încearcă din nou.");
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+}
+
+// ── MATEMATICĂ simulare ──
+// Format real EN VIII matematică:
+//   Subiectul I (30p):  6 itemi multiple-choice (a câte 5p), litera A/B/C/D
+//   Subiectul II (30p): 6 itemi multiple-choice (a câte 5p), litera A/B/C/D
+//   Subiectul III (30p): 2 probleme cu rezolvare scrisă completă (15p fiecare, 2p+3p+...)
+//   10p din oficiu → total 100p
+export async function generateSimulareMatematica(allMathChapters) {
+  const system = `Ești autor de subiecte EN VIII pentru matematică. Cunoști baremul oficial.\nRăspunde DOAR cu JSON valid, fără text extra.`;
+
+  const topics = topicsFromSubject("matematica", allMathChapters);
+
+  const prompt = `Generează un subiect complet de SIMULARE EN VIII Matematică, format real.\n\nTeme acoperite: ${topics}\n\nFormat OBLIGATORIU (cu punctaje exacte):\n- Subiectul I (30p): 6 itemi multiple-choice cu 4 variante A/B/C/D, a câte 5p\n- Subiectul II (30p): 6 itemi multiple-choice cu 4 variante A/B/C/D, a câte 5p\n- Subiectul III (30p): 2 probleme cu rezolvare scrisă completă, 15p fiecare, structurate cu sub-puncte (a, b, c)\n\nJSON STRICT (nimic altceva):\n{\n  "titlu": "Simulare EN VIII Matematică",\n  "durata": 120,\n  "punctajOficiu": 10,\n  "subiectI": {\n    "punctaj": 30,\n    "itemi": [\n      {"id": "I.1", "punctaj": 5, "enunt": "Enunțul complet (poate include figuri descrise în text)", "optiuni": ["A) ...", "B) ...", "C) ...", "D) ..."], "corect": "A"},\n      {"id": "I.2", "punctaj": 5, "enunt": "...", "optiuni": ["A) ...", "B) ...", "C) ...", "D) ..."], "corect": "B"},\n      ...\n    ]\n  },\n  "subiectII": {\n    "punctaj": 30,\n    "itemi": [...6 itemi multiple-choice]\n  },\n  "subiectIII": {\n    "punctaj": 30,\n    "probleme": [\n      {\n        "id": "III.1",\n        "punctaj": 15,\n        "enunt": "Enunțul complet al problemei, cu date numerice concrete",\n        "subpuncte": [\n          {"id": "a", "punctaj": 2, "cerinta": "Cerința sub-punctului a)"},\n          {"id": "b", "punctaj": 3, "cerinta": "..."},\n          {"id": "c", "punctaj": 5, "cerinta": "..."},\n          {"id": "d", "punctaj": 5, "cerinta": "..."}\n        ],\n        "rezolvareReferinta": {\n          "pasi": ["Pas 1: ...", "Pas 2: ..."],\n          "raspunsFinal": "Rezultatul final clar pentru fiecare sub-punct"\n        }\n      },\n      {"id": "III.2", "punctaj": 15, ...}\n    ]\n  }\n}\n\nReguli:\n- Probleme și itemi REALISTICI tip EN VIII\n- Itemii multiple-choice să acopere algebră, geometrie, funcții, calcul, statistică (variat)\n- Cele 2 probleme: una de algebră/funcții, una de geometrie\n- Notație matematică în text simplu (ex: x^2, sqrt(2), nu LaTeX)\n- "corect" = exact A, B, C sau D\n- Punctajul subpunctelor să sumeze 15 per problemă\n- Sub-punctele să fie 3-5 per problemă, gradat dificultate`;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const raw = await aiCall([{ role: "user", content: prompt }], system, 4500, 2, "simulare");
+      const parsed = extractJSON(raw);
+      if (!parsed.subiectI?.itemi || !parsed.subiectII?.itemi || !parsed.subiectIII?.probleme) {
+        throw new Error("Structură invalidă");
+      }
+      const normItems = (arr, prefix) =>
+        (arr || []).slice(0, 6).map((it, i) => ({
+          id: it.id || `${prefix}.${i + 1}`,
+          punctaj: it.punctaj || 5,
+          enunt: it.enunt || "",
+          optiuni: Array.isArray(it.optiuni) && it.optiuni.length === 4 ? it.optiuni : ["A) -", "B) -", "C) -", "D) -"],
+          corect: ["A", "B", "C", "D"].includes(it.corect) ? it.corect : "A",
+        }));
+      return {
+        titlu: parsed.titlu || "Simulare EN VIII Matematică",
+        materie: "matematica",
+        durata: parsed.durata || 120,
+        punctajOficiu: parsed.punctajOficiu || 10,
+        subiectI: { punctaj: 30, itemi: normItems(parsed.subiectI.itemi, "I") },
+        subiectII: { punctaj: 30, itemi: normItems(parsed.subiectII.itemi, "II") },
+        subiectIII: {
+          punctaj: 30,
+          probleme: (parsed.subiectIII.probleme || []).slice(0, 2).map((p, i) => ({
+            id: p.id || `III.${i + 1}`,
+            punctaj: p.punctaj || 15,
+            enunt: p.enunt || "",
+            subpuncte: Array.isArray(p.subpuncte) ? p.subpuncte.map((s, j) => ({
+              id: s.id || String.fromCharCode(97 + j),
+              punctaj: s.punctaj || 2,
+              cerinta: s.cerinta || "",
+            })) : [],
+            rezolvareReferinta: {
+              pasi: Array.isArray(p.rezolvareReferinta?.pasi) ? p.rezolvareReferinta.pasi : [],
+              raspunsFinal: p.rezolvareReferinta?.raspunsFinal || "",
+            },
+          })),
+        },
+      };
+    } catch (err) {
+      if (err.message?.startsWith("LIMIT_REACHED:")) throw err;
+      if (attempt === 2) throw new Error("Nu s-a putut genera simularea. Încearcă din nou.");
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+}
+
+// ── EVALUATE simulare română ──
+// answers shape: { "I.A.1": "text răspuns", ..., "I.B.3": "text", "essay": "compunere" }
+// Returns: detailed evaluation with score per subiect and total
+export async function evaluateSimulareRomana(simulare, answers, userName = "elevul") {
+  const system = `Ești profesor evaluator EN VIII pentru limba română. Aplici baremul oficial cu rigoare, dar oferi feedback constructiv pentru elev.\nRăspunde DOAR cu JSON valid.`;
+
+  const essayText = answers.essay || "";
+  const wordCount = essayText.trim().split(/\s+/).filter(Boolean).length;
+
+  const itemsForEval = [
+    ...simulare.subiectI.parteaA.itemi.map(it => ({
+      id: it.id, punctajMaxim: it.punctaj, cerinta: it.cerinta, raspuns: answers[it.id] || "",
+    })),
+    ...simulare.subiectI.parteaB.itemi.map(it => ({
+      id: it.id, punctajMaxim: it.punctaj, cerinta: it.cerinta, raspuns: answers[it.id] || "",
+    })),
+  ];
+
+  const prompt = `Evaluează simularea EN VIII Română a elevului ${userName}.\n\nTEXTUL DE LA SUBIECTUL I:\n${simulare.subiectI.text}\n\nITEMII ȘI RĂSPUNSURILE:\n${JSON.stringify(itemsForEval, null, 2)}\n\nSUBIECTUL II — COMPUNERE:\nCerință: ${simulare.subiectII.cerinta}\nLungime cerută: ${simulare.subiectII.lungimeMin}-${simulare.subiectII.lungimeMax} cuvinte\nLungime efectivă: ${wordCount} cuvinte\n\nTEXT compunere:\n"""\n${essayText}\n"""\n\nJSON STRICT (nimic altceva):\n{\n  "subiectI": {\n    "punctajTotal": numar (0-60),\n    "itemi": [\n      {"id": "I.A.1", "punctaj": 0-5, "punctajMaxim": 5, "comentariu": "1 propoziție"},\n      ...toți cei 9 itemi\n    ]\n  },\n  "subiectII": {\n    "punctajTotal": numar (0-30),\n    "criterii": [\n      {"nume": "continut", "punctaj": 0-8, "maxim": 8, "comentariu": "..."},\n      {"nume": "structura", "punctaj": 0-6, "maxim": 6, "comentariu": "..."},\n      {"nume": "stil", "punctaj": 0-6, "maxim": 6, "comentariu": "..."},\n      {"nume": "ortografie", "punctaj": 0-6, "maxim": 6, "comentariu": "..."},\n      {"nume": "redactare", "punctaj": 0-4, "maxim": 4, "comentariu": "..."}\n    ],\n    "puncteForte": ["..."],\n    "deImbunatatit": ["..."]\n  },\n  "feedbackGeneral": "2-4 propoziții calde, motivante, despre cum a mers și ce să prioritizeze",\n  "capitoleDeRevazut": ["nume capitol/temă concretă pe care s-au pierdut puncte"]\n}\n\nReguli:\n- Punctajul itemilor trebuie să respecte maximul fiecărui item\n- Pentru itemi de tip "scurt" (5p): 0/3/5 e tipic — 3p pentru parțial corect, 5p pentru complet\n- Pentru itemi "lung" (10p): scor parțial pe pași (3-7-10)\n- Compunerea: 30p total, criteriile sumează 30p\n- Dacă lungimea compunerii e în afara limitei (${simulare.subiectII.lungimeMin}-${simulare.subiectII.lungimeMax}), scade din "redactare"\n- Comentariile scurte și SPECIFICE, NU generice`;
+
+  const raw = await aiCall([{ role: "user", content: prompt }], system, 3000, 2, "chat");
+  const parsed = extractJSON(raw);
+
+  const subiectIPuncte = (parsed.subiectI?.itemi || []).reduce((s, i) => s + (Number(i.punctaj) || 0), 0);
+  const subiectIIPuncte = (parsed.subiectII?.criterii || []).reduce((s, c) => s + (Number(c.punctaj) || 0), 0);
+  const totalPuncte = subiectIPuncte + subiectIIPuncte + (simulare.punctajOficiu || 10);
+  const nota = Math.round((totalPuncte / 10) * 100) / 100; // /10 cu 2 zecimale
+
+  return {
+    materie: "romana",
+    nota,
+    totalPuncte,
+    punctajOficiu: simulare.punctajOficiu || 10,
+    wordCount,
+    subiectI: {
+      punctaj: subiectIPuncte,
+      maxim: 60,
+      itemi: parsed.subiectI?.itemi || [],
+    },
+    subiectII: {
+      punctaj: subiectIIPuncte,
+      maxim: 30,
+      criterii: parsed.subiectII?.criterii || [],
+      puncteForte: parsed.subiectII?.puncteForte || [],
+      deImbunatatit: parsed.subiectII?.deImbunatatit || [],
+    },
+    feedbackGeneral: parsed.feedbackGeneral || "",
+    capitoleDeRevazut: parsed.capitoleDeRevazut || [],
+  };
+}
+
+// ── EVALUATE simulare matematică ──
+// answers shape: { "I.1": "A", "II.1": "B", ..., "III.1": "rezolvare scrisă", "III.2": "rezolvare" }
+export async function evaluateSimulareMatematica(simulare, answers, userName = "elevul") {
+  const system = `Ești profesor evaluator EN VIII pentru matematică. Aplici baremul oficial. Acorzi punctaj parțial pentru pași corecți (cum se face la EN).\nRăspunde DOAR cu JSON valid.`;
+
+  // Auto-grade multiple choice client-side first (fast, free, no AI needed)
+  const gradeMC = (item, given) => ({
+    id: item.id, punctaj: given === item.corect ? item.punctaj : 0, punctajMaxim: item.punctaj,
+    rasspunsCorect: item.corect, raspunsDat: given || null,
+  });
+  const subiectIRez = simulare.subiectI.itemi.map(it => gradeMC(it, answers[it.id]));
+  const subiectIIRez = simulare.subiectII.itemi.map(it => gradeMC(it, answers[it.id]));
+  const subiectIPuncte = subiectIRez.reduce((s, i) => s + i.punctaj, 0);
+  const subiectIIPuncte = subiectIIRez.reduce((s, i) => s + i.punctaj, 0);
+
+  // Subiectul III needs AI evaluation (open-ended written solutions)
+  const problemeCuRaspunsuri = simulare.subiectIII.probleme.map(p => ({
+    id: p.id,
+    punctajMaxim: p.punctaj,
+    enunt: p.enunt,
+    subpuncte: p.subpuncte,
+    rezolvareReferinta: p.rezolvareReferinta,
+    rezolvareElev: answers[p.id] || "",
+  }));
+
+  const prompt = `Evaluează rezolvările elevului ${userName} pentru Subiectul III al simulării EN VIII matematică.\n\nPROBLEME ȘI REZOLVĂRI:\n${JSON.stringify(problemeCuRaspunsuri, null, 2)}\n\nJSON STRICT:\n{\n  "probleme": [\n    {\n      "id": "III.1",\n      "punctajTotal": 0-15,\n      "subpuncte": [\n        {"id": "a", "punctaj": 0-Nmax, "punctajMaxim": Nmax, "comentariu": "1-2 propoziții"},\n        ...\n      ],\n      "comentariu": "Comentariu general despre rezolvare",\n      "primulPasGresit": "dacă e cazul"\n    },\n    {"id": "III.2", ...}\n  ],\n  "feedbackGeneral": "2-4 propoziții calde și motivante",\n  "capitoleDeRevazut": ["..."]\n}\n\nReguli barem EN VIII:\n- Răspuns final corect cu rezolvare completă: punctaj maxim sub-punct\n- Răspuns final corect dar fără justificare: ~50% din sub-punct\n- Pași inițiali corecți care apoi greșesc: punctaj parțial\n- Abordare complet greșită: 0p\n- Suma punctajelor sub-punctelor = punctaj total problemă (15p)\n- Dacă elevul nu a scris nimic: 0p toate sub-punctele\n- Fii cald și motivant, dar onest`;
+
+  const raw = await aiCall([{ role: "user", content: prompt }], system, 2500, 2, "chat");
+  const parsed = extractJSON(raw);
+
+  const subiectIIIRez = (parsed.probleme || []).map(p => ({
+    id: p.id,
+    punctaj: (p.subpuncte || []).reduce((s, sp) => s + (Number(sp.punctaj) || 0), 0),
+    maxim: 15,
+    subpuncte: p.subpuncte || [],
+    comentariu: p.comentariu || "",
+    primulPasGresit: p.primulPasGresit || "",
+  }));
+  const subiectIIIPuncte = subiectIIIRez.reduce((s, p) => s + p.punctaj, 0);
+
+  const totalPuncte = subiectIPuncte + subiectIIPuncte + subiectIIIPuncte + (simulare.punctajOficiu || 10);
+  const nota = Math.round((totalPuncte / 10) * 100) / 100;
+
+  return {
+    materie: "matematica",
+    nota,
+    totalPuncte,
+    punctajOficiu: simulare.punctajOficiu || 10,
+    subiectI: { punctaj: subiectIPuncte, maxim: 30, itemi: subiectIRez },
+    subiectII: { punctaj: subiectIIPuncte, maxim: 30, itemi: subiectIIRez },
+    subiectIII: { punctaj: subiectIIIPuncte, maxim: 30, probleme: subiectIIIRez },
+    feedbackGeneral: parsed.feedbackGeneral || "",
+    capitoleDeRevazut: parsed.capitoleDeRevazut || [],
+  };
+}
+
 // ── Email send ────────────────────────────────────────────────────────────────
 export async function sendEmail({ to, subject, html }) {
   try {

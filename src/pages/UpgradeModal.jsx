@@ -77,6 +77,7 @@ export default function UpgradeModal({ onClose, limitType, token }) {
     lesson: "lecții generate",
     quiz: "quiz-uri",
     chat: "mesaje cu tutorele AI",
+    simulare: "simulări de examen",
   };
 
   async function handleUpgrade() {
