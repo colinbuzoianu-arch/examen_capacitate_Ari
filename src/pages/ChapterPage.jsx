@@ -7,11 +7,12 @@ import { logger } from "../utils/logger.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import UpgradeModal from "./UpgradeModal.jsx";
 import { recordContentRead, recordChatMessage, recordQuizAttempt } from "../utils/gamification.js";
+import { trackFeature } from "../utils/featureTracking.js";
 
 export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlock }) {
   const { user } = useAuth();
   const sub      = SUBJECTS[subject];
-  const chapter  = sub.chapters.find(c => c.id === chapterId);
+  const chapter  = sub?.chapters?.find(c => c.id === chapterId);
   const storageKey = `chapter_${chapterId}`;
   const cloudKey   = `chapter_${chapterId}`;
 
@@ -74,6 +75,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   // ── EFFECTS ────────────────────────────────────────────────────────────────
   // Load from cloud on mount — with 5s timeout fallback
   useEffect(() => {
+    if (!chapter || !sub) return;
     logger.chapterOpened(chapter, subject);
     const timeout = setTimeout(() => {
       // If cloud takes too long, proceed with localStorage data
@@ -111,6 +113,16 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
+
+  useEffect(() => {
+    if (!chapter || !sub) return;
+    if (tab === "essay" && subject === "romana") {
+      trackFeature("essay_tab_opened", { chapterId, chapterTitle: chapter.title, subject });
+    }
+    if (tab === "math" && subject === "matematica") {
+      trackFeature("math_tab_opened", { chapterId, chapterTitle: chapter.title, subject });
+    }
+  }, [tab, chapterId, subject]);
 
   // ── ACTIONS ────────────────────────────────────────────────────────────────
   async function loadContent() {
@@ -221,6 +233,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       setEssayText("");
       setEssayResult(null);
       persist({ essayPrompt: p, essayText: "", essayResult: null });
+      trackFeature("essay_prompt_generated", { chapterId, chapterTitle: chapter.title, subject });
     } catch (e) {
       if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
       else setEssayError(e.message || "Eroare la generarea cerinței.");
@@ -230,7 +243,11 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
 
   function updateEssayText(t) {
     setEssayText(t);
-    persist({ essayText: t });
+    const started = !!savedRef.current._essayDraftStarted;
+    persist({ essayText: t, ...(t.trim() && !started ? { _essayDraftStarted: true } : {}) });
+    if (t.trim() && !started) {
+      trackFeature("essay_draft_started", { chapterId, chapterTitle: chapter.title, subject });
+    }
   }
 
   async function submitEssay() {
@@ -238,10 +255,12 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     setEvalEssay(true);
     setEssayError(null);
     try {
+      trackFeature("essay_evaluation_submitted", { chapterId, chapterTitle: chapter.title, subject, wordCount: essayWordCount });
       const result = await evaluateEssay(chapter, essayPrompt, essayText, user?.name?.split(" ")[0] || "elevul");
       setEssayResult(result);
       persist({ essayResult: result });
       logger.essayEvaluated(chapter, subject, result.score, result.wordCount);
+      trackFeature("essay_evaluation_completed", { chapterId, chapterTitle: chapter.title, subject, score: result.score, wordCount: result.wordCount || essayWordCount });
     } catch (e) {
       if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
       else setEssayError(e.message || "Eroare la evaluare.");
@@ -251,7 +270,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
 
   function resetEssay() {
     setEssayPrompt(null); setEssayText(""); setEssayResult(null);
-    persist({ essayPrompt: null, essayText: "", essayResult: null });
+    persist({ essayPrompt: null, essayText: "", essayResult: null, _essayDraftStarted: false });
   }
 
   // ── MATH PROBLEMS HANDLERS ──────────────────────────────────────────────────
@@ -266,6 +285,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
       setVerdicts({});
       persist({ mathProblems: data });
       logger.mathProblemsGenerated(chapter, subject);
+      trackFeature("math_set_generated", { chapterId, chapterTitle: chapter.title, subject, problemCount: data?.problems?.length || 0 });
     } catch (e) {
       if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("lesson");
       else setProblemsError(e.message || "Eroare la generarea problemelor.");
@@ -274,7 +294,13 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   }
 
   function toggleSolution(problemId) {
-    setRevealed(prev => ({ ...prev, [problemId]: !prev[problemId] }));
+    setRevealed(prev => {
+      const nextValue = !prev[problemId];
+      if (nextValue) {
+        trackFeature("math_solution_revealed", { chapterId, chapterTitle: chapter.title, subject, problemId });
+      }
+      return { ...prev, [problemId]: nextValue };
+    });
   }
 
   function updateStudentSolution(problemId, text) {
@@ -286,9 +312,11 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
     if (!sol || evalProblemId === problem.id) return;
     setEvalPid(problem.id);
     try {
+      trackFeature("math_solution_submitted", { chapterId, chapterTitle: chapter.title, subject, problemId: problem.id, dificultate: problem.dificultate });
       const verdict = await evaluateMathSolution(problem, sol, user?.name?.split(" ")[0] || "elevul");
       setVerdicts(prev => ({ ...prev, [problem.id]: verdict }));
       logger.mathSolutionEvaluated(chapter, subject, problem.dificultate, verdict.verdict, verdict.scor);
+      trackFeature("math_solution_evaluated", { chapterId, chapterTitle: chapter.title, subject, problemId: problem.id, dificultate: problem.dificultate, verdict: verdict.verdict, score: verdict.scor });
     } catch (e) {
       if (e.message?.startsWith("LIMIT_REACHED:")) setUpgradeModal("chat");
       else setVerdicts(prev => ({ ...prev, [problem.id]: { verdict: "gresit", scor: 0, comentariu: "Eroare la verificare. Încearcă din nou.", indiciu: "" } }));
@@ -321,6 +349,14 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
   ];
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
+  if (!sub || !chapter) return (
+    <div style={{ padding: 20, fontFamily: "'Inter', sans-serif" }}>
+      <h2>Nu s-a putut încărca lecția</h2>
+      <p>Capitolul sau materia nu există în structura aplicației. Te rog revino la pagina anterioară.</p>
+      <button style={S.btnY} onClick={onBack}>Înapoi</button>
+    </div>
+  );
+
   if (!cloudLoaded) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 16, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ fontSize: 32 }}>📖</div>
@@ -500,7 +536,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                     style={{ ...S.btnY, opacity: (Object.keys(answers).length === quiz.questions.length && !evaluating) ? 1 : 0.4 }}
                     onClick={submitQuiz}
                     disabled={Object.keys(answers).length < quiz.questions.length || evaluating}>
-                    {evaluating ? "⏳ Claude corectează..." : `✅ Trimite răspunsurile (${Object.keys(answers).length}/10)`}
+                    {evaluating ? "⏳ Aplicația corectează..." : `✅ Trimite răspunsurile (${Object.keys(answers).length}/10)`}
                   </button>
                 )}
               </div>
@@ -517,7 +553,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                 <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
                   La EN VIII, Subiectul II îți cere să redactezi un text de <strong>150-300 cuvinte</strong>.
                   E unde se câștigă sau se pierd 16 puncte. Aici primești o cerință pe tema capitolului
-                  <strong> "{chapter.title}"</strong>, scrii compunerea, iar Claude o evaluează după baremul oficial.
+                  <strong> "{chapter.title}"</strong>, scrii compunerea, iar Aplicația o evaluează după baremul oficial.
                 </p>
                 <div style={{ background: "#FFF8E7", border: "1px solid #F0D98A", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#7A5C00", marginBottom: 14, lineHeight: 1.5 }}>
                   ⚠️ <strong>Important:</strong> lungimea trebuie să fie strict 150-300 cuvinte.
@@ -580,7 +616,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                         onClick={submitEssay}
                         disabled={!essayInRange || evaluatingEssay}
                       >
-                        {evaluatingEssay ? "⏳ Claude evaluează..." : "✅ Trimite spre evaluare"}
+                        {evaluatingEssay ? "⏳ Aplicația evaluează..." : "✅ Trimite spre evaluare"}
                       </button>
                       <button style={S.btnGray} onClick={resetEssay}>🔄 Alt subiect</button>
                     </div>
@@ -684,7 +720,7 @@ export default function ChapterPage({ chapterId, subject, userId, onBack, onUnlo
                   La Subiectul III primești puncte parțiale chiar dacă răspunsul final e greșit.
                 </p>
                 <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: "0 0 14px" }}>
-                  Aici Claude îți generează 3 probleme pe tema <strong>"{chapter.title}"</strong> —
+                  Aici Aplicația îți generează 3 probleme pe tema <strong>"{chapter.title}"</strong> —
                   una ușoară, una medie, una grea — cu rezolvare pas-cu-pas. Poți încerca singur și
                   primi feedback, sau să vezi direct rezolvarea.
                 </p>
@@ -860,14 +896,14 @@ function renderMd(text) {
 
 // ── Animated loading ──────────────────────────────────────────────────────────
 const CONTENT_MESSAGES = [
-  "Claude citește programa de clasa a VIII-a...",
+  "Aplicația citește programa de clasa a VIII-a...",
   "Se pregătesc explicații pentru tine...",
   "Se caută cele mai bune exemple...",
   "Se construiesc exercițiile rezolvate...",
   "Aproape gata! Se finisează lecția...",
 ];
 const QUIZ_MESSAGES = [
-  "Claude inventează întrebări dificile... 😈",
+  "Aplicația inventează întrebări dificile... 😈",
   "Se calibrează dificultatea pentru tine...",
   "Se verifică întrebările cu programa EN...",
   "Se pregătesc capcanele... 🪤",

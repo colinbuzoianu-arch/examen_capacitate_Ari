@@ -59,8 +59,13 @@ export default function AdminApp({ onLogout }) {
 
   useEffect(() => { loadUsers(); }, []);
 
-  // Load detail when user selected
-  async function selectUser(u) {
+  // Load detail when user selected. Pass forceRefresh=true to reload even when re-clicking same user.
+  async function selectUser(u, forceRefresh = false) {
+    // Re-clicking the same user with data already loaded: just switch view (cheap)
+    if (!forceRefresh && selectedUser?.userId === u.userId && userDetail) {
+      setView("detail");
+      return;
+    }
     setSelectedUser(u);
     setUserDetail(null);
     setUserLogs([]);
@@ -219,36 +224,60 @@ export default function AdminApp({ onLogout }) {
         {view === "overview" && (
           <div>
             <div style={S.sectionTitle}>Rezumat general</div>
-            <div style={S.kpiRow}>
-              <Kpi label="Elevi înregistrați" value={users.length} icon="👥" />
-              <Kpi label="Activi azi" value={users.filter(u => u.stats?.lastStudyDate === new Date().toISOString().slice(0,10)).length} icon="🔥" />
-              <Kpi label="Total capitole bifate" value={users.reduce((a, u) => a + (u.stats?.unlockedChapters || 0), 0)} icon="✅" />
-              <Kpi label="Total XP câștigat" value={users.reduce((a, u) => a + (u.stats?.totalXP || 0), 0)} icon="⚡" />
-            </div>
-
-            <div style={S.sectionTitle}>Clasament elevi</div>
-            {users.length === 0
-              ? <div style={S.empty}>Nu există elevi înregistrați încă.</div>
-              : users.map(u => (
-                <div key={u.userId} style={{ ...S.userCard, cursor: "pointer" }} onClick={() => selectUser(u)}>
-                  <div style={S.userCardLeft}>
-                    <div style={S.userName}>{u.name}</div>
-                    <div style={S.userEmail}>{u.email}</div>
-                    {u.stats?.lastStudyDate && (
-                      <div style={S.userLastSeen}>Ultima activitate: {new Date(u.stats.lastStudyDate).toLocaleDateString("ro-RO")}</div>
-                    )}
-                  </div>
-                  <div style={S.userCardRight}>
-                    <div style={S.userXP}>⚡ {u.stats?.totalXP || 0} XP</div>
-                    {u.stats?.currentStreak > 0 && <div style={S.userStreak}>🔥 {u.stats.currentStreak} zile</div>}
-                    <div style={S.userChapters}>{u.stats?.unlockedChapters || 0}/15 capitole</div>
-                    <div style={S.progressBar}>
-                      <div style={{ ...S.progressFill, width: `${Math.round(((u.stats?.unlockedChapters || 0) / 15) * 100)}%` }} />
-                    </div>
-                  </div>
+            {usersLoading && users.length === 0 ? (
+              <div style={S.loading}>Se încarcă elevii…</div>
+            ) : (
+              <>
+                <div style={S.kpiRow}>
+                  <Kpi label="Elevi înregistrați" value={users.length} icon="👥" />
+                  <Kpi label="Activi azi" value={users.filter(u => u.stats?.lastStudyDate === new Date().toISOString().slice(0,10)).length} icon="🔥" />
+                  <Kpi label="Capitole bifate" value={users.reduce((a, u) => a + (u.stats?.unlockedChapters || 0), 0)} icon="✅" />
+                  <Kpi label="XP total" value={users.reduce((a, u) => a + (u.stats?.totalXP || 0), 0)} icon="⚡" />
                 </div>
-              ))
-            }
+
+                {/* Secondary signals */}
+                {(() => {
+                  const now = Date.now();
+                  const D = 86400000;
+                  const active7d = users.filter(u => {
+                    const t = u.stats?.lastActiveAt ? new Date(u.stats.lastActiveAt).getTime() : 0;
+                    return t && (now - t) < 7 * D;
+                  }).length;
+                  const stuckUsers = users.filter(u => {
+                    const t = u.stats?.lastActiveAt ? new Date(u.stats.lastActiveAt).getTime() : 0;
+                    return t && (now - t) > 3 * D && (u.stats?.unlockedChapters || 0) < 15;
+                  });
+                  const totalSim = users.reduce((a, u) => a + (u.stats?.simRoCompleted || 0) + (u.stats?.simMaCompleted || 0), 0);
+                  const totalQuizzes = users.reduce((a, u) => a + (u.stats?.quizzesPassed || 0), 0);
+                  return (
+                    <>
+                      <div style={S.kpiRow}>
+                        <Kpi label="Activi 7 zile" value={active7d} icon="📈" />
+                        <Kpi label="Quiz-uri trecute" value={totalQuizzes} icon="🧠" />
+                        <Kpi label="Simulări finalizate" value={totalSim} icon="🎓" />
+                        <Kpi label="Stuck (3+ zile)" value={stuckUsers.length} icon="⚠️" />
+                      </div>
+                      {stuckUsers.length > 0 && (
+                        <>
+                          <div style={S.sectionTitle}>⚠️ Elevi inactivi (3+ zile)</div>
+                          {stuckUsers.slice(0, 5).map(u => (
+                            <UserRow key={u.userId} u={u} onClick={() => selectUser(u)} compact />
+                          ))}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+
+                <div style={S.sectionTitle}>Clasament (după activitate)</div>
+                {users.length === 0
+                  ? <div style={S.empty}>Nu există elevi înregistrați încă.</div>
+                  : users.map(u => (
+                      <UserRow key={u.userId} u={u} onClick={() => selectUser(u)} />
+                    ))
+                }
+              </>
+            )}
           </div>
         )}
 
@@ -259,6 +288,8 @@ export default function AdminApp({ onLogout }) {
               <div style={S.sectionTitle}>Elevi înregistrați ({users.length})</div>
               <button style={S.btnSmall} onClick={loadUsers}>{usersLoading ? "..." : "🔄 Reîncarcă"}</button>
             </div>
+            {usersLoading && users.length === 0 && <div style={S.loading}>Se încarcă elevii…</div>}
+            {!usersLoading && users.length === 0 && <div style={S.empty}>Nu există elevi înregistrați încă.</div>}
             {users.map(u => (
               <div key={u.userId} style={{ ...S.userCard, cursor: "pointer" }} onClick={() => selectUser(u)}>
                 <div style={S.userCardLeft}>
@@ -274,6 +305,20 @@ export default function AdminApp({ onLogout }) {
                     <Tag label={`${u.stats?.unlockedChapters || 0}/15`} icon="✅" />
                     <Tag label={`${u.stats?.quizzesPassed || 0} quiz`} icon="🧠" />
                     <Tag label={`${u.stats?.badges || 0} badges`} icon="🏅" />
+                    <Tag label={`${u.stats?.essayEvaluations || 0} comp.`} icon="📝" />
+                    <Tag label={`${u.stats?.mathSets || 0} seturi`} icon="🧮" />
+                    {(() => {
+                      const ro = u.stats?.simRoCompleted || 0;
+                      const ma = u.stats?.simMaCompleted || 0;
+                      const total = ro + ma;
+                      if (total === 0) return null;
+                      const bestRo = u.stats?.simRoBestNota;
+                      const bestMa = u.stats?.simMaBestNota;
+                      const bestPart = bestRo != null || bestMa != null
+                        ? ` · max ${Math.max(bestRo ?? 0, bestMa ?? 0).toFixed(2)}`
+                        : "";
+                      return <Tag label={`${total} sim${bestPart}`} icon="🎓" highlight />;
+                    })()}
                     {u.stats?.currentStreak > 0 && <Tag label={`${u.stats.currentStreak}🔥`} highlight />}
                   </div>
                   <div style={{ ...S.progressBar, marginTop: 6 }}>
@@ -294,7 +339,7 @@ export default function AdminApp({ onLogout }) {
                 <div style={S.detailName}>{selectedUser.name}</div>
                 <div style={S.detailEmail}>{selectedUser.email}</div>
               </div>
-              <button style={S.btnSmall} onClick={() => selectUser(selectedUser)}>🔄</button>
+              <button style={S.btnSmall} onClick={() => selectUser(selectedUser, true)}>🔄</button>
             </div>
 
             {detailLoading && <div style={S.loading}>Se încarcă datele...</div>}
@@ -309,6 +354,8 @@ export default function AdminApp({ onLogout }) {
                   <Kpi label="Capitole bifate" value={Object.keys(userDetail.unlocked || {}).length} icon="✅" />
                 </div>
 
+                <FeatureUsagePanel usage={userDetail.featureUsage} chapters={ALL_CHAPTERS} />
+
                 {/* Management panel */}
                 <div style={{ background: "#F8F6F2", borderRadius: 14, padding: "16px 20px", marginBottom: 20 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#1A1A1A", marginBottom: 12, fontFamily: "'Syne',sans-serif" }}>
@@ -318,10 +365,10 @@ export default function AdminApp({ onLogout }) {
                   {/* Usage counters */}
                   {userUsage && (
                     <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                      {[["lesson","Lecții","📖"], ["quiz","Quiz-uri","🧠"], ["chat","Chat","💬"]].map(([k, lbl, ico]) => (
+                      {[["lesson","Lecții","📖",15], ["quiz","Quiz-uri","🧠",30], ["chat","Chat","💬",150], ["simulare","Simulări","🎓",4]].map(([k, lbl, ico, lim]) => (
                         <div key={k} style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 12, border: "1px solid #E0DBD0" }}>
                           {ico} {lbl}: <strong>{userUsage[k] || 0}</strong>
-                          <span style={{ color: "#AAA" }}> /{k === "lesson" ? 15 : k === "quiz" ? 30 : 150}</span>
+                          <span style={{ color: "#AAA" }}> /{lim}</span>
                         </div>
                       ))}
                     </div>
@@ -425,19 +472,33 @@ export default function AdminApp({ onLogout }) {
         {/* ── EMAIL ── */}
         {view === "email" && (
           <div>
+            {/* Shared recipient — single source of truth */}
+            <div style={S.card}>
+              <div style={S.cardTitle}>📧 Destinatar</div>
+              <input type="email" placeholder="Email destinatar..." value={manualTarget}
+                onChange={e => setManualTarget(e.target.value)}
+                style={S.inputField} />
+              <div style={{ fontSize: 11, color: "#777", margin: "6px 0 0" }}>
+                {users.length > 0 && (
+                  <>Sau alege rapid: {users.slice(0, 5).map(u => (
+                    <button key={u.userId}
+                      onClick={() => setManualTarget(u.email)}
+                      style={{ background: "none", border: "1px solid #E0DBD0", borderRadius: 6, padding: "2px 8px", fontSize: 11, color: manualTarget === u.email ? "#C8A84B" : "#666", cursor: "pointer", marginRight: 4, marginTop: 4, fontFamily: "'Inter',sans-serif" }}>
+                      {u.name?.split(" ")[0] || u.email.split("@")[0]}
+                    </button>
+                  ))}</>
+                )}
+              </div>
+            </div>
+
             {/* Reminder */}
             <div style={S.card}>
               <div style={S.cardTitle}>📨 Reminder săptămânal</div>
               <p style={{ fontSize: 13, color: "#666", lineHeight: 1.6, margin: "0 0 12px" }}>
-                Trimite un reminder cu progresul săptămânii curente.
+                Trimite un reminder cu progresul săptămânii curente către <strong>{manualTarget || "—"}</strong>.
               </p>
-              <input type="email" placeholder="Email destinatar..." value={manualTarget}
-                onChange={e => setManualTarget(e.target.value)}
-                style={S.inputField} />
-              <div style={{ fontSize: 11, color: "#777", margin: "6px 0 12px" }}>
-                Către: {manualTarget || "(niciun destinatar)"}
-              </div>
-              <button style={{ ...S.btnDark, opacity: sending ? 0.5 : 1 }} onClick={sendReminder} disabled={sending}>
+              <button style={{ ...S.btnDark, opacity: (sending || !manualTarget) ? 0.5 : 1 }}
+                onClick={sendReminder} disabled={sending || !manualTarget}>
                 {sending ? "Se trimite..." : "📨 Trimite reminder"}
               </button>
             </div>
@@ -446,19 +507,13 @@ export default function AdminApp({ onLogout }) {
             <div style={S.card}>
               <div style={S.cardTitle}>✉️ Mesaj personal</div>
               <p style={{ fontSize: 13, color: "#666", lineHeight: 1.6, margin: "0 0 12px" }}>
-                Scrie un mesaj personalizat pentru un elev.
+                Scrie un mesaj personalizat pentru <strong>{manualTarget || "—"}</strong>.
               </p>
-              <input type="email" placeholder="Email destinatar..." value={manualTarget}
-                onChange={e => setManualTarget(e.target.value)}
-                style={{ ...S.inputField, marginBottom: 10 }} />
               <textarea value={manualMsg} onChange={e => setManualMsg(e.target.value)}
                 placeholder="Scrie mesajul tău..."
                 style={{ ...S.inputField, minHeight: 100, resize: "vertical" }} />
-              <div style={{ fontSize: 11, color: "#777", margin: "6px 0 12px" }}>
-                Către: {manualTarget || "(niciun destinatar)"}
-              </div>
-              <button style={{ ...S.btnDark, opacity: (manualMsg.trim() && !sending) ? 1 : 0.4 }}
-                onClick={sendManualMessage} disabled={!manualMsg.trim() || sending}>
+              <button style={{ ...S.btnDark, opacity: (manualMsg.trim() && manualTarget && !sending) ? 1 : 0.4 }}
+                onClick={sendManualMessage} disabled={!manualMsg.trim() || !manualTarget || sending}>
                 {sending ? "Se trimite..." : "✉️ Trimite mesaj"}
               </button>
             </div>
@@ -484,6 +539,51 @@ function Kpi({ label, value, icon }) {
   );
 }
 
+function UserRow({ u, onClick, compact }) {
+  const lastActiveRel = relTime(u.stats?.lastActiveAt);
+  const area = u.stats?.lastArea;
+  return (
+    <div style={{ ...S.userCard, cursor: "pointer" }} onClick={onClick}>
+      <div style={S.userCardLeft}>
+        <div style={S.userName}>
+          {u.name}
+          {u.blocked && <span style={S.miniBadgeRed}>🚫</span>}
+          {u.premium && <span style={S.miniBadgeGold}>⭐</span>}
+        </div>
+        <div style={S.userEmail}>{u.email}</div>
+        {lastActiveRel && (
+          <div style={S.userLastSeen}>
+            {lastActiveRel}{area ? ` · ${area}` : ""}
+          </div>
+        )}
+      </div>
+      <div style={S.userCardRight}>
+        <div style={S.userXP}>⚡ {u.stats?.totalXP || 0} XP</div>
+        {!compact && u.stats?.currentStreak > 0 && <div style={S.userStreak}>🔥 {u.stats.currentStreak} zile</div>}
+        <div style={S.userChapters}>{u.stats?.unlockedChapters || 0}/15 capitole</div>
+        <div style={S.progressBar}>
+          <div style={{ ...S.progressFill, width: `${Math.round(((u.stats?.unlockedChapters || 0) / 15) * 100)}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function relTime(iso) {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const diff = Date.now() - t;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "acum câteva secunde";
+  if (min < 60) return `acum ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `acum ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `acum ${d} ${d === 1 ? "zi" : "zile"}`;
+  return new Date(iso).toLocaleDateString("ro-RO");
+}
+
 function Tag({ label, icon, highlight }) {
   return (
     <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, background: highlight ? "#FFF8E7" : "#F0EDE6", color: highlight ? "#E65100" : "#888", border: `1px solid ${highlight ? "#F0D98A" : "#E0DBD0"}`, fontFamily: "'Inter',sans-serif" }}>
@@ -503,6 +603,124 @@ function ChipTag({ done, label, warn, icon }) {
   );
 }
 
+
+function formatDateTime(v) {
+  if (!v) return "—";
+  try { return new Date(v).toLocaleString("ro-RO"); } catch { return "—"; }
+}
+
+function FeatureUsagePanel({ usage, chapters }) {
+  const essay = usage?.essay || {};
+  const math = usage?.math || {};
+  const sim = usage?.simulare || { romana: {}, matematica: {} };
+  const simRo = sim.romana || {};
+  const simMa = sim.matematica || {};
+  const avgMath = math.evaluationsCompleted ? (math.scoreTotal / math.evaluationsCompleted).toFixed(1) : "—";
+  const avgEssayWords = essay.evaluationsCompleted ? Math.round((essay.wordsTotal || 0) / essay.evaluationsCompleted) : "—";
+  const avgSimRo = simRo.completed ? (simRo.notaTotal / simRo.completed).toFixed(2) : "—";
+  const avgSimMa = simMa.completed ? (simMa.notaTotal / simMa.completed).toFixed(2) : "—";
+
+  return (
+    <div style={S.featurePanel}>
+      <div style={S.featurePanelTitle}>📈 Utilizare feature-uri speciale</div>
+      <div style={S.featureGrid}>
+        <div style={S.featureCard}>
+          <div style={S.featureHeader}>📝 Compunere</div>
+          <div style={S.featureStatsGrid}>
+            <MiniStat label="Tab deschis" value={essay.tabOpened || 0} />
+            <MiniStat label="Cerințe generate" value={essay.promptsGenerated || 0} />
+            <MiniStat label="Drafturi începute" value={essay.draftsStarted || 0} />
+            <MiniStat label="Evaluări" value={essay.evaluationsCompleted || 0} />
+            <MiniStat label="Cel mai bun scor" value={essay.bestScore ?? "—"} />
+            <MiniStat label="Media cuvinte" value={avgEssayWords} />
+          </div>
+          <div style={S.featureLast}>Ultima folosire: {formatDateTime(essay.lastUsed)}</div>
+          <ChapterFeatureList chapters={chapters.filter(c => c.subject === "romana")} feature={essay} primaryField="evaluationsCompleted" empty="Nicio compunere evaluată încă." />
+        </div>
+
+        <div style={S.featureCard}>
+          <div style={S.featureHeader}>🧮 Probleme</div>
+          <div style={S.featureStatsGrid}>
+            <MiniStat label="Tab deschis" value={math.tabOpened || 0} />
+            <MiniStat label="Seturi generate" value={math.setsGenerated || 0} />
+            <MiniStat label="Rezolvări văzute" value={math.solutionsRevealed || 0} />
+            <MiniStat label="Rezolvări trimise" value={math.solutionsSubmitted || 0} />
+            <MiniStat label="Verificări" value={math.evaluationsCompleted || 0} />
+            <MiniStat label="Scor mediu" value={avgMath} />
+          </div>
+          <div style={S.featureLast}>Ultima folosire: {formatDateTime(math.lastUsed)}</div>
+          <ChapterFeatureList chapters={chapters.filter(c => c.subject === "matematica")} feature={math} primaryField="setsGenerated" empty="Nicio problemă generată încă." />
+        </div>
+
+        <div style={S.featureCard}>
+          <div style={S.featureHeader}>🎓 Simulare EN</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <SimSubBlock label="📖 Română" color="#C8392B" started={simRo.started || 0} completed={simRo.completed || 0} bestNota={simRo.bestNota} lastNota={simRo.lastNota} avg={avgSimRo} />
+            <SimSubBlock label="📐 Matematică" color="#1A5276" started={simMa.started || 0} completed={simMa.completed || 0} bestNota={simMa.bestNota} lastNota={simMa.lastNota} avg={avgSimMa} />
+          </div>
+          <div style={S.featureLast}>Ultima folosire: {formatDateTime(sim.lastUsed)}</div>
+          {(simRo.completed || 0) + (simMa.completed || 0) === 0 && (
+            <div style={S.featureEmpty}>Nicio simulare finalizată încă.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SimSubBlock({ label, color, started, completed, bestNota, lastNota, avg }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #E0DBD0", borderRadius: 10, padding: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color, fontFamily: "'Syne',sans-serif", marginBottom: 6 }}>{label}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "#444" }}>
+        <div>Începute: <strong>{started}</strong></div>
+        <div>Finalizate: <strong>{completed}</strong></div>
+        <div>Cel mai bun: <strong style={{ color: bestNota != null && bestNota >= 8 ? "#2E7D32" : "#1A1A1A" }}>{bestNota != null ? Number(bestNota).toFixed(2) : "—"}</strong></div>
+        <div>Ultima: <strong>{lastNota != null ? Number(lastNota).toFixed(2) : "—"}</strong></div>
+        <div>Media: <strong>{avg}</strong></div>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div style={S.miniStat}>
+      <div style={S.miniStatValue}>{value}</div>
+      <div style={S.miniStatLabel}>{label}</div>
+    </div>
+  );
+}
+
+function ChapterFeatureList({ chapters, feature, primaryField, empty }) {
+  const rows = chapters
+    .map(c => ({ ...c, data: feature?.chapters?.[c.id] || {} }))
+    .filter(c => Object.keys(c.data).length > 0)
+    .sort((a, b) => (b.data[primaryField] || 0) - (a.data[primaryField] || 0));
+
+  if (!rows.length) return <div style={S.featureEmpty}>{empty}</div>;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      {rows.map(c => (
+        <div key={c.id} style={S.featureChapterRow}>
+          <div style={{ flex: 1 }}>
+            <div style={S.featureChapterTitle}>{c.title}</div>
+            <div style={S.featureChapterMeta}>Ultima activitate: {formatDateTime(c.data.lastUsed)}</div>
+          </div>
+          <div style={S.featureChapterCounters}>
+            {c.data.promptsGenerated ? <span>cerințe {c.data.promptsGenerated}</span> : null}
+            {c.data.evaluationsCompleted ? <span>eval. {c.data.evaluationsCompleted}</span> : null}
+            {c.data.setsGenerated ? <span>seturi {c.data.setsGenerated}</span> : null}
+            {c.data.solutionsSubmitted ? <span>trimise {c.data.solutionsSubmitted}</span> : null}
+            {c.data.solutionsRevealed ? <span>văzute {c.data.solutionsRevealed}</span> : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const EVENT_LABELS = {
   chapter_opened:     { icon: "📂", label: "Capitol deschis", color: "#F59E0B" },
   content_generated:  { icon: "✨", label: "Lecție generată", color: "#8B5CF6" },
@@ -513,12 +731,15 @@ const EVENT_LABELS = {
   math_problems_generated: { icon: "🧮", label: "Probleme generate", color: "#1A5276" },
   math_solution_evaluated: { icon: "✍️", label: "Rezolvare verificată", color: "#1A5276" },
   chapter_unlocked:   { icon: "🏆", label: "Capitol bifat!", color: "#C8A84B" },
+  simulare_started:   { icon: "🎓", label: "Simulare începută", color: "#7B1D1D" },
+  simulare_completed: { icon: "📊", label: "Simulare finalizată", color: "#0D2E4E" },
 };
 
 function LogEntry({ log, expanded, onToggle }) {
   const ev = EVENT_LABELS[log.type] || { icon: "•", label: log.type, color: "#888" };
   const time = new Date(log.ts).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
   const isQuiz = log.type === "quiz_submitted";
+  const isSimCompleted = log.type === "simulare_completed";
 
   return (
     <div style={S.logRow}>
@@ -553,6 +774,13 @@ function LogEntry({ log, expanded, onToggle }) {
               ))}
             </div>
           )}
+          {isSimCompleted && (
+            <div style={{ marginTop: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#1A1A1A", background: "#FFF8E7", padding: "2px 8px", borderRadius: 8, border: "1px solid #F0D98A" }}>
+                Nota: <strong>{log.nota?.toFixed?.(2) ?? log.nota}</strong> · {log.totalPuncte}/100p
+              </span>
+            </div>
+          )}
           {log.type === "chat_message" && log.userMessage && (
             <div style={{ fontSize: 12, color: "#888", marginTop: 4, fontStyle: "italic" }}>
               "{log.userMessage.slice(0, 80)}{log.userMessage.length > 80 ? "..." : ""}"
@@ -584,7 +812,9 @@ const S = {
   userCard:   { background: "#fff", borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: "1px solid #E0DBD0", display: "flex", gap: 12, alignItems: "flex-start" },
   userCardLeft: { flex: 1 },
   userCardRight:{ textAlign: "right", flexShrink: 0 },
-  userName:   { fontSize: 14, fontWeight: 700, color: "#1A1A1A", fontFamily: "'Syne',sans-serif" },
+  userName:   { fontSize: 14, fontWeight: 700, color: "#1A1A1A", fontFamily: "'Syne',sans-serif", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  miniBadgeRed:{ fontSize: 11 },
+  miniBadgeGold:{ fontSize: 11 },
   userEmail:  { fontSize: 11, color: "#888", marginTop: 2 },
   userLastSeen:{ fontSize: 10, color: "#AAA", marginTop: 2 },
   userXP:     { fontSize: 16, fontWeight: 800, color: "#C8A84B", fontFamily: "'Syne',sans-serif" },
@@ -605,6 +835,21 @@ const S = {
   btnSmall:   { background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontFamily: "'Inter',sans-serif", fontWeight: 600 },
   loading:    { textAlign: "center", color: "#AAA", padding: "30px 0", fontStyle: "italic", fontSize: 13 },
   empty:      { textAlign: "center", color: "#AAA", padding: "20px 0", fontStyle: "italic", fontSize: 13 },
+  featurePanel:{ background: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 20, border: "1px solid #E0DBD0" },
+  featurePanelTitle:{ fontSize: 13, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif", marginBottom: 12 },
+  featureGrid:{ display: "grid", gridTemplateColumns: "1fr", gap: 12 },
+  featureCard:{ background: "#F8F6F2", borderRadius: 12, padding: 12, border: "1px solid #E0DBD0" },
+  featureHeader:{ fontSize: 13, fontWeight: 800, color: "#1A1A1A", fontFamily: "'Syne',sans-serif", marginBottom: 10 },
+  featureStatsGrid:{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 },
+  miniStat:{ background: "#fff", border: "1px solid #E0DBD0", borderRadius: 10, padding: "8px 6px", textAlign: "center" },
+  miniStatValue:{ fontSize: 16, fontWeight: 800, color: "#C8A84B", fontFamily: "'Syne',sans-serif", lineHeight: 1 },
+  miniStatLabel:{ fontSize: 9, color: "#888", marginTop: 4, lineHeight: 1.2 },
+  featureLast:{ fontSize: 10, color: "#888", marginTop: 9, fontStyle: "italic" },
+  featureEmpty:{ fontSize: 11, color: "#AAA", marginTop: 10, fontStyle: "italic" },
+  featureChapterRow:{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #E0DBD0", borderRadius: 9, padding: "8px 10px", marginTop: 6 },
+  featureChapterTitle:{ fontSize: 11, fontWeight: 700, color: "#1A1A1A" },
+  featureChapterMeta:{ fontSize: 9, color: "#AAA", marginTop: 2 },
+  featureChapterCounters:{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 9, color: "#666", fontWeight: 700 },
   lightboxOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
   toast:      { position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#1A1A1A", color: "#fff", fontWeight: 700, padding: "11px 24px", borderRadius: 20, zIndex: 400, fontSize: 14, boxShadow: "0 4px 24px rgba(0,0,0,.2)", whiteSpace: "nowrap", fontFamily: "'Inter',sans-serif" },
 };

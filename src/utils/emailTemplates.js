@@ -118,6 +118,112 @@ export function reminderEmailHtml({
 </html>`;
 }
 
+export function simulareResultEmailHtml({
+  studentName = "Ari",
+  subject,          // "romana" | "matematica"
+  nota,             // float e.g. 8.75
+  totalPuncte,      // int e.g. 87
+  subiectI,         // { punctaj, maxim }
+  subiectII,        // { punctaj, maxim }
+  subiectIII,       // { punctaj, maxim } — mate only, null for romana
+  feedbackGeneral,
+  capitoleDeRevazut = [],
+  durataMinute,     // how many minutes used
+  appUrl,
+}) {
+  const isRo = subject === "romana";
+  const subColor = isRo ? "#C8392B" : "#1A5276";
+  const subBg    = isRo ? "#FFF5F5" : "#EEF4FF";
+  const subLabel = isRo ? "Limbă și Literatură Română" : "Matematică";
+  const subIcon  = isRo ? "📖" : "📐";
+
+  const notaNum = typeof nota === "number" ? nota : parseFloat(nota) || 0;
+  const emoji = notaNum >= 9 ? "🏆" : notaNum >= 7 ? "🎯" : notaNum >= 5 ? "💪" : "📚";
+  const notaColor = notaNum >= 8 ? "#2E7D32" : notaNum >= 6 ? "#E65100" : "#C62828";
+
+  const bar = (p, color) => {
+    const pct = Math.round(p * 10) / 10;
+    const filled = Math.round(pct);
+    const empty = 10 - filled;
+    return `<span style="font-family:monospace;font-size:13px;color:${color};">${"█".repeat(filled)}</span><span style="font-family:monospace;font-size:13px;color:#E8E4DC;">${"░".repeat(empty)}</span>`;
+  };
+
+  const subjectRow = (label, punctaj, maxim, color) => {
+    const pct = maxim > 0 ? punctaj / maxim : 0;
+    return `
+    <tr>
+      <td style="padding:8px 0;font-size:13px;color:#444;font-family:Georgia,serif;white-space:nowrap;">${label}</td>
+      <td style="padding:8px 0 8px 10px;">${bar(pct * 10, color)}</td>
+      <td style="padding:8px 0 8px 10px;font-size:14px;font-weight:bold;color:${color};white-space:nowrap;">${punctaj}/${maxim}</td>
+    </tr>`;
+  };
+
+  const revazutList = capitoleDeRevazut.length > 0
+    ? `<ul style="margin:6px 0 0;padding-left:18px;">${capitoleDeRevazut.map(c => `<li style="font-size:12px;color:#555;margin-bottom:3px;">${c}</li>`).join("")}</ul>`
+    : `<p style="font-size:12px;color:#888;margin:4px 0 0;font-style:italic;">Nicio temă specifică de revăzut — felicitări!</p>`;
+
+  return `<!DOCTYPE html>
+<html lang="ro">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F0EDE6;font-family:Georgia,serif;">
+<div style="max-width:540px;margin:0 auto;padding:24px 16px;">
+
+  <!-- Header -->
+  <div style="background:#1A1A1A;border-radius:20px 20px 0 0;padding:28px 24px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:10px;">${emoji}</div>
+    <h1 style="color:#C8A84B;font-size:22px;margin:0 0 4px;font-family:Georgia,serif;">Simulare EN VIII finalizată</h1>
+    <p style="color:#888;font-size:13px;margin:0;">${studentName} · ${subIcon} ${subLabel}</p>
+    ${durataMinute ? `<p style="color:#666;font-size:12px;margin:6px 0 0;">Durată: ${durataMinute} minute din 120</p>` : ""}
+  </div>
+
+  <!-- Big nota -->
+  <div style="background:${subBg};padding:28px 24px;text-align:center;border-left:1px solid #E8E4DC;border-right:1px solid #E8E4DC;">
+    <div style="font-size:12px;color:#999;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Nota finală</div>
+    <div style="font-size:56px;font-weight:bold;color:${notaColor};line-height:1;font-family:Georgia,serif;">${notaNum.toFixed(2)}</div>
+    <div style="font-size:14px;color:#666;margin-top:6px;">${totalPuncte} / 100 puncte</div>
+  </div>
+
+  <!-- Breakdown -->
+  <div style="background:#fff;padding:20px 24px;border-left:1px solid #E8E4DC;border-right:1px solid #E8E4DC;border-top:1px solid #F0EDE6;">
+    <div style="font-size:12px;color:#999;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Punctaj pe subiecte</div>
+    <table style="width:100%;border-collapse:collapse;">
+      ${subjectRow("Subiectul I", subiectI.punctaj, subiectI.maxim, subColor)}
+      ${subjectRow("Subiectul II", subiectII.punctaj, subiectII.maxim, subColor)}
+      ${subiectIII ? subjectRow("Subiectul III", subiectIII.punctaj, subiectIII.maxim, subColor) : ""}
+      ${subjectRow("Din oficiu", 10, 10, "#C8A84B")}
+    </table>
+  </div>
+
+  <!-- Feedback -->
+  ${feedbackGeneral ? `
+  <div style="background:#fff;padding:16px 24px;border-left:1px solid #E8E4DC;border-right:1px solid #E8E4DC;border-top:1px solid #F0EDE6;">
+    <div style="font-size:12px;color:#999;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">💬 Feedback</div>
+    <p style="font-size:14px;color:#333;line-height:1.7;margin:0;">${feedbackGeneral}</p>
+  </div>` : ""}
+
+  <!-- De revazut -->
+  <div style="background:#FFF8E7;padding:16px 24px;border:1px solid #F0D98A;border-top:none;">
+    <div style="font-size:12px;color:#7A5C00;font-weight:bold;margin-bottom:4px;">📚 De revăzut</div>
+    ${revazutList}
+  </div>
+
+  <!-- CTA -->
+  <div style="background:#fff;padding:20px 24px;border-left:1px solid #E8E4DC;border-right:1px solid #E8E4DC;border-top:1px solid #F0EDE6;text-align:center;">
+    <a href="${appUrl}" style="display:inline-block;background:#1A1A1A;color:#fff;text-decoration:none;font-weight:bold;padding:14px 32px;border-radius:12px;font-size:15px;">
+      🎓 Deschide aplicația →
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <div style="background:#1A1A1A;border-radius:0 0 20px 20px;padding:14px 24px;text-align:center;">
+    <p style="color:#666;font-size:11px;margin:0;">Studiu EN26 · en26.verumsell.com</p>
+  </div>
+
+</div>
+</body>
+</html>`;
+}
+
 export function chapterUnlockEmailHtml({ studentName, chapterTitle, subject, score, totalXP, streak, chaptersUnlocked, totalChapters, appUrl }) {
   const subColor = subject === "romana" ? "#C8392B" : "#1A5276";
   const subLabel = subject === "romana" ? "Română" : "Matematică";

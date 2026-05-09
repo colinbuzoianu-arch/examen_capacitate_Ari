@@ -210,7 +210,7 @@ export default function LogsView() {
                       </button>
                       {isExp && (
                         <div style={{ ...S.chatPreview, background: "#F8F6F2", borderColor: "#E8E4DC", marginTop: 4 }}>
-                          <span style={{ color: "#C8A84B", fontWeight: 600 }}>Claude:</span> {log.aiReply}
+                          <span style={{ color: "#C8A84B", fontWeight: 600 }}>Aplicația:</span> {log.aiReply}
                         </div>
                       )}
                     </div>
@@ -307,7 +307,7 @@ export default function LogsView() {
                   {log.userMessage}
                 </div>
                 <div style={S.chatBubbleAI}>
-                  <span style={{ fontSize: 10, color: "#C8A84B", fontWeight: 700, display: "block", marginBottom: 3 }}>Claude a răspuns:</span>
+                  <span style={{ fontSize: 10, color: "#C8A84B", fontWeight: 700, display: "block", marginBottom: 3 }}>Aplicația a răspuns:</span>
                   {log.aiReply}
                 </div>
               </div>
