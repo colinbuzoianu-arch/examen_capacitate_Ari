@@ -6,8 +6,8 @@ export const config = {
 // GET  /api/progress         → load progress for authenticated user
 // POST /api/progress         → save progress for authenticated user
 
-import { getSession } from "./lib/auth.js";
-import { redisCmd } from "./lib/redis.js";
+import { getSession } from "../lib/auth.js";
+import { redisCmd } from "../lib/redis.js";
 
 async function getUser(req) {
   const token = req.headers.authorization?.replace("Bearer ", "");

@@ -2,8 +2,8 @@
 // POST /api/reset-password?action=request  → send reset email with token
 // POST /api/reset-password?action=confirm  → set new password using token
 
-import { getUserByEmail, hashPassword } from "./lib/auth.js";
-import { redisCmd } from "./lib/redis.js";
+import { getUserByEmail, hashPassword } from "../lib/auth.js";
+import { redisCmd } from "../lib/redis.js";
 
 const TOKEN_TTL = 60 * 60; // 1 hour
 

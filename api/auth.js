@@ -7,7 +7,7 @@
 import {
   getUserByEmail, createUser, verifyPassword,
   createSession, getSession, deleteSession,
-} from "./lib/auth.js";
+} from "../lib/auth.js";
 
 export default async function handler(req, res) {
   const { action } = req.query;

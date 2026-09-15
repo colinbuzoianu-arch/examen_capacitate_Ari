@@ -1,7 +1,7 @@
 // api/log.js — Vercel Serverless Function
 // Receives activity events from Ari's app and stores them in Upstash Redis
 
-import { pushLog, setChapterStat, getChapterStat } from "./lib/redis.js";
+import { pushLog, setChapterStat, getChapterStat } from "../lib/redis.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

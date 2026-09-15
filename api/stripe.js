@@ -2,8 +2,8 @@
 // POST /api/stripe?action=checkout  → creeaza sesiune plata
 // POST /api/stripe?action=webhook   → primeste confirmare Stripe
 
-import { getSession } from "./lib/auth.js";
-import { redisCmd } from "./lib/redis.js";
+import { getSession } from "../lib/auth.js";
+import { redisCmd } from "../lib/redis.js";
 
 export const config = { api: { bodyParser: false } };
 

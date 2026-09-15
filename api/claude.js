@@ -2,8 +2,8 @@
 // Proxies to Anthropic API with per-user interaction limits
 // Uses Claude Haiku for fast/structured tasks (quiz), Sonnet for content
 
-import { getSession } from "./lib/auth.js";
-import { redisCmd } from "./lib/redis.js";
+import { getSession } from "../lib/auth.js";
+import { redisCmd } from "../lib/redis.js";
 
 // ── Limite per cont ───────────────────────────────────────────────────────────
 // 15 capitole total (7 Română + 8 Matematică)

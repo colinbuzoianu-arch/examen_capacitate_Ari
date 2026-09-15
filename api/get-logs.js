@@ -2,7 +2,7 @@
 // No auth needed — app is private, data not sensitive enough to warrant it
 // (Admin access is already protected by password in the React app)
 
-import { getLogsForDay, getLogDays, getAllChapterStats } from "./lib/redis.js";
+import { getLogsForDay, getLogDays, getAllChapterStats } from "../lib/redis.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {

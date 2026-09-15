@@ -4,8 +4,8 @@
 // GET /api/admin-users?mode=logs&uid=X&day=YYYY-MM-DD → logs for one user
 // POST /api/admin-users?mode=override     → manually set chapter as unlocked
 
-import { getAllUsers, getSession } from "./lib/auth.js";
-import { redisCmd } from "./lib/redis.js";
+import { getAllUsers, getSession } from "../lib/auth.js";
+import { redisCmd } from "../lib/redis.js";
 
 const CHAPTER_IDS = ["r1","r2","r3","r4","r5","r6","r7","m1","m2","m3","m4","m5","m6","m7","m8"];
 const TOTAL_CHAPTERS = CHAPTER_IDS.length;
