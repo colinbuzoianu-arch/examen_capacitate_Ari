@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2.1.1 — Oprire remindere săptămânale
+
+- Eliminat cron-ul `0 18 * * 5` din `vercel.json` — Vercel nu mai apelează `/api/cron-reminder`
+- `api/cron-reminder.js` returnează acum `410 Gone` și nu mai trimite niciun email
+  (protecție în caz că endpoint-ul e apelat manual sau de un scheduler rămas în urmă)
+- Motiv: EN 2026 s-a încheiat, iar utilizatorii au cerut oprirea emailurilor
+
 ## 2.1.0 — Simulare EN VIII + admin polish
 
 ### Features

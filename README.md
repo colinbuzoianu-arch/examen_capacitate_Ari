@@ -74,7 +74,7 @@ api/
   progress.js          ← progres utilizator
   admin-users.js       ← admin endpoints + feature tracking
   reset-password.js    ← reset parolă
-  cron-reminder.js     ← reminder săptămânal
+  cron-reminder.js     ← DEZACTIVAT (returnează 410, nu trimite nimic)
   stripe.js            ← checkout + webhook
   send-email.js        ← Resend wrapper
 ```
