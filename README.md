@@ -5,7 +5,7 @@ Limbă și Literatură Română + Matematică, 15 capitole, sistem de progres ve
 
 ## Funcționalități principale
 
-1. **📚 Lecții AI** — tutore Socratic per capitol, limbă română
+1. **📚 Lecții AI** — tutore Socratic per capitol, limbă română  
 2. **✅ Quiz** — trebuie să obții minim 8/10 pentru a debloca capitolul următor
 3. **📝 Compunere** — cerințe EN VIII Subiect II + evaluare după barem (Română)
 4. **🧮 Probleme model** — set de 3 probleme cu rezolvare verificată AI (Matematică)
